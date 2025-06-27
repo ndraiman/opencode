@@ -1,0 +1,83 @@
+---
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import Share from "../../components/Share.tsx";
+import { fetchLocalSessions, fetchSessionMessages } from "../../lib/local-session-utils";
+
+const localApiUrl = import.meta.env.VITE_LOCAL_API_URL || "http://localhost:4096";
+const { sessionId } = Astro.params;
+
+let sessionInfo;
+let messages;
+let error = null;
+
+try {
+  const [sessions, messagesList] = await Promise.all([
+    fetchLocalSessions(localApiUrl),
+    fetchSessionMessages(localApiUrl, sessionId)
+  ]);
+
+  sessionInfo = sessions.find((s: any) => s.id === sessionId);
+  messages = messagesList;
+
+  if (!sessionInfo) {
+    return new Response(null, {
+      status: 404,
+      statusText: 'Session not found'
+    });
+  }
+} catch (e) {
+  error = e.message;
+}
+
+if (error) {
+  return new Response(null, {
+    status: 500,
+    statusText: error
+  });
+}
+
+const messagesObj = {};
+messages.forEach((msg: any) => {
+  messagesObj[msg.id] = msg;
+});
+
+---
+<StarlightPage
+  hasSidebar={false}
+  frontmatter={{
+    title: sessionInfo.title,
+    pagefind: false,
+    template: "splash",
+    tableOfContents: false,
+    head: [
+      {
+        tag: "meta",
+        attrs: {
+          name: "description",
+          content: "opencode - Local Session Viewer",
+        },
+      },
+    ],
+  }}
+>
+  <Share
+    id={sessionId}
+    api={localApiUrl}
+    info={sessionInfo}
+    messages={messagesObj}
+    client:only="solid"
+  />
+</StarlightPage>
+
+<style is:global>
+body > .page > .main-frame .main-pane > main > .content-panel:first-of-type {
+  display: none;
+}
+body > .page > .main-frame .main-pane > main {
+  padding: 0;
+}
+body > .page > .main-frame .main-pane > main > .content-panel + .content-panel {
+  border-top: none !important;
+  padding: 0;
+}
+</style>

@@ -1,0 +1,275 @@
+---
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import SessionsList from "../../components/SessionsList.tsx";
+import { fetchLocalSessions, fetchSessionMessages, computeSessionData } from "../../lib/local-session-utils";
+
+const localApiUrl = import.meta.env.VITE_LOCAL_API_URL || "http://localhost:4096";
+
+let currentProjectPath = null;
+let sessions = [];
+let error = null;
+
+try {
+  const sessionList = await fetchLocalSessions(localApiUrl);
+  
+  const sessionsWithData = await Promise.all(
+    sessionList.map(async (session: any) => {
+      try {
+        const messages = await fetchSessionMessages(localApiUrl, session.id);
+        const computedData = computeSessionData(session, messages);
+        return { ...session, computedData };
+      } catch (e) {
+        return { 
+          ...session, 
+          computedData: {
+            rootDir: undefined,
+            created: session.time.created,
+            completed: undefined,
+            models: {},
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0 }
+          }
+        };
+      }
+    })
+  );
+  
+  const sortedSessions = sessionsWithData.sort((a: any, b: any) => b.time.updated - a.time.updated);
+  const recentSessionWithPath = sortedSessions.find((session: any) => session.computedData.rootDir);
+  currentProjectPath = recentSessionWithPath?.computedData.rootDir;
+  
+  const filteredSessions = currentProjectPath 
+    ? sessionsWithData.filter((session: any) => 
+        session.computedData.rootDir === currentProjectPath
+      )
+    : [];
+  
+  sessions = filteredSessions.sort((a: any, b: any) => b.time.updated - a.time.updated);
+} catch (e) {
+  error = e.message;
+}
+
+const helpText = '<ol>' +
+  '<li>Start opencode server: <code>opencode serve</code></li>' +
+  '<li>Run opencode in this project directory to create sessions</li>' +
+  '<li>Sessions will appear here if they were created in the current project directory</li>' +
+  '</ol>' +
+  '<p><strong>Project Directory:</strong> ' +
+  (currentProjectPath ? '<code>' + currentProjectPath + '</code>' : 'No sessions with project path found') +
+  '</p>' +
+  '<p><strong>Storage Location:</strong> Regular sessions are stored in temporary storage (opencode server memory)</p>' +
+  '<p><strong>Note:</strong> This page shows only current sessions from the project directory above. Use <code>/export</code> to export sessions for permanent storage.</p>';
+
+---
+<StarlightPage
+  hasSidebar={false}
+  frontmatter={{
+    title: "Current Project Sessions",
+    pagefind: false,
+    template: "splash",
+    tableOfContents: false,
+    head: [
+      {
+        tag: "meta",
+        attrs: {
+          name: "description",
+          content: "opencode - Current Project Sessions",
+        },
+      },
+    ],
+  }}
+>
+  <SessionsList
+    sessions={sessions}
+    title="Current Project Sessions"
+    emptyMessage="No sessions found for the current project. Start opencode in this directory to create sessions."
+    helpText={helpText}
+    error={error}
+    apiUrl={localApiUrl}
+    client:only="solid"
+  />
+</StarlightPage>
+
+<style is:global>
+body > .page > .main-frame .main-pane > main > .content-panel:first-of-type {
+  display: none;
+}
+body > .page > .main-frame .main-pane > main {
+  padding: 0;
+}
+body > .page > .main-frame .main-pane > main > .content-panel + .content-panel {
+  border-top: none !important;
+  padding: 0;
+}
+
+.local-sessions {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.local-sessions h1 {
+  color: var(--sl-color-white);
+  margin-bottom: 2rem;
+}
+
+.error-message {
+  background: var(--sl-color-red-low);
+  border: 1px solid var(--sl-color-red);
+  color: var(--sl-color-red-high);
+  padding: 1rem;
+  border-radius: 8px;
+  margin: 1rem 0;
+}
+
+.error-message p {
+  margin-top: 0.5rem;
+  font-size: 0.9em;
+  opacity: 0.8;
+}
+
+.empty-state {
+  color: var(--sl-color-gray-3);
+  text-align: center;
+  padding: 2rem;
+  font-style: italic;
+}
+
+.sessions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+}
+
+.session-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem;
+  background: var(--sl-color-gray-6);
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.session-item:hover {
+  background: var(--sl-color-gray-5);
+  border-color: var(--sl-color-accent);
+}
+
+.session-title h3 {
+  font-size: 2.75rem;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.05em;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 30rem) {
+  .session-title h3 {
+    font-size: 1.75rem;
+    line-height: 1.25;
+  }
+}
+
+.session-link {
+  color: var(--sl-color-white);
+  text-decoration: none;
+}
+
+.session-link:hover {
+  color: var(--sl-color-accent);
+  text-decoration: underline;
+}
+
+[data-section="row"] {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+[data-section="stats"] {
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  gap: 0.5rem 1rem;
+  flex-wrap: wrap;
+}
+
+[data-section="stats"] li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+[data-section="stats"][data-section-root] li,
+[data-section="stats"][data-section-models] li {
+  gap: 0.3125rem;
+}
+
+[data-stat-icon] {
+  flex: 0 0 auto;
+  color: var(--sl-color-text-dimmed);
+  opacity: 0.85;
+}
+
+[data-stat-icon] svg {
+  display: block;
+}
+
+[data-element-label] {
+  text-transform: uppercase;
+  letter-spacing: -0.5px;
+  color: var(--sl-color-text-dimmed);
+}
+
+[data-placeholder] {
+  color: var(--sl-color-text-dimmed);
+}
+
+[data-stat-model] {
+  color: var(--sl-color-text);
+}
+
+[data-section="time"] {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+[data-section="time"] span {
+  color: var(--sl-color-text-dimmed);
+  font-size: 0.875rem;
+}
+
+.help-section {
+  margin-top: 2rem;
+  padding: 1rem;
+  background: var(--sl-color-blue-low);
+  border: 1px solid var(--sl-color-blue);
+  border-radius: 8px;
+}
+
+.help-section h3 {
+  color: var(--sl-color-blue-high);
+  margin-top: 0;
+}
+
+.help-section ol {
+  color: var(--sl-color-gray-2);
+}
+
+.help-section code {
+  background: var(--sl-color-gray-6);
+  color: var(--sl-color-accent);
+  padding: 0.2em 0.4em;
+  border-radius: 4px;
+  font-family: var(--sl-font-mono);
+}
+</style>
