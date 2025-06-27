@@ -8,6 +8,7 @@ export interface SessionData {
     updated: number
   }
   version?: string
+  exportedAt?: number
   computedData: {
     rootDir?: string
     created: number
@@ -195,6 +196,7 @@ export default function SessionsList(props: SessionsListProps) {
                               session.computedData.created,
                             ).toLocaleString()}
                           >
+                            Started{" "}
                             {new Date(
                               session.computedData.created,
                             ).toLocaleDateString("en-US", {
@@ -209,6 +211,32 @@ export default function SessionsList(props: SessionsListProps) {
                                 hour: "2-digit",
                                 minute: "2-digit",
                               })}
+                          </span>
+                        </Show>
+                        <Show when={session.exportedAt}>
+                          <span
+                            title={new Date(
+                              session.exportedAt!,
+                            ).toLocaleString()}
+                            style="font-size: 0.9em; color: #666;"
+                          >
+                            Exported{" "}
+                            {new Date(session.exportedAt!).toLocaleDateString(
+                              "en-US",
+                              {
+                                year: "numeric",
+                                month: "short",
+                                day: "numeric",
+                              },
+                            ) +
+                              ", " +
+                              new Date(session.exportedAt!).toLocaleTimeString(
+                                "en-US",
+                                {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                },
+                              )}
                           </span>
                         </Show>
                       </div>

@@ -17,7 +17,8 @@ try {
     const computedData = computeSessionData(session, messages);
     return { 
       ...session, 
-      computedData
+      computedData,
+      exportedAt: exportData.exportedAt
     };
   });
   
@@ -230,7 +231,8 @@ body > .page > .main-frame .main-pane > main > .content-panel + .content-panel {
 
 [data-section="time"] {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
   gap: 0.25rem;
 }
 
