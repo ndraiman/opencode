@@ -66,7 +66,9 @@ interface Todo {
   priority: "low" | "medium" | "high"
 }
 
-function sortTodosByStatus(todos: Todo[]) {
+function sortTodosByStatus(todos: Todo[] | undefined) {
+  if (!todos) return []
+
   const statusPriority: Record<TodoStatus, number> = {
     in_progress: 0,
     pending: 1,
