@@ -21,7 +21,6 @@ let error = null;
 try {
   const sessions = await fetchExportedSessions(localApiUrl);
 
-  console.log(sessions)
   // Find session from exported sessions structure
   const exportedSession = sessions.find((exportData: ExportedSession) => 
     exportData.session.id === sessionId
