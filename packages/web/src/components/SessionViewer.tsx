@@ -1,4 +1,4 @@
-import { createSignal, createEffect } from "solid-js"
+import { onCleanup } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import Share from "./Share"
 import MessageInput from "./MessageInput"
@@ -18,7 +18,51 @@ export default function SessionViewer(props: SessionViewerProps) {
   const [messagesStore, setMessagesStore] = createStore<
     Record<string, Message.Info>
   >(props.initialMessages)
-  const [refreshTrigger, setRefreshTrigger] = createSignal(0)
+
+  let shareRef: HTMLDivElement | undefined
+  let resizeObserver: ResizeObserver | undefined
+
+  // Auto-scroll function
+  const scrollToBottom = () => {
+    requestAnimationFrame(() => {
+      const docElement = document.documentElement
+      const scrollHeight = Math.max(
+        document.body.scrollHeight,
+        document.body.offsetHeight,
+        docElement.clientHeight,
+        docElement.scrollHeight,
+        docElement.offsetHeight,
+      )
+
+      docElement.scrollTo({
+        top: scrollHeight,
+        behavior: "smooth",
+      })
+    })
+  }
+
+  // Start observing for height changes during streaming
+  const startScrollObserver = () => {
+    if (shareRef && !resizeObserver) {
+      resizeObserver = new ResizeObserver(() => {
+        scrollToBottom()
+      })
+      resizeObserver.observe(shareRef)
+    }
+  }
+
+  // Stop observing when streaming ends
+  const stopScrollObserver = () => {
+    if (resizeObserver) {
+      resizeObserver.disconnect()
+      resizeObserver = undefined
+    }
+  }
+
+  // Cleanup observer on component unmount
+  onCleanup(() => {
+    stopScrollObserver()
+  })
 
   // Function to refresh messages from server
   const refreshMessages = async () => {
@@ -37,19 +81,15 @@ export default function SessionViewer(props: SessionViewerProps) {
     }
   }
 
-  // Refresh messages when trigger changes
-  createEffect(() => {
-    if (refreshTrigger() > 0) {
-      refreshMessages()
-    }
-  })
-
   const handleMessageSent = () => {
-    // Trigger a refresh by incrementing the signal
-    setRefreshTrigger((prev) => prev + 1)
+    // Directly refresh messages when sent
+    refreshMessages()
   }
 
   const handleStreamingUpdate = (assistantMessageId: string, text: string) => {
+    // Start observing when streaming begins
+    startScrollObserver()
+
     // Create or update the assistant message during streaming
     setMessagesStore(assistantMessageId, (prev) => {
       if (prev) {
@@ -75,6 +115,9 @@ export default function SessionViewer(props: SessionViewerProps) {
   }
 
   const handleMessageComplete = (message: Message.Info) => {
+    // Stop observing when streaming ends
+    stopScrollObserver()
+
     // Replace optimistic message with real server message
     if (message && message.id) {
       setMessagesStore(message.id, message)
@@ -83,12 +126,14 @@ export default function SessionViewer(props: SessionViewerProps) {
 
   return (
     <div>
-      <Share
-        id={props.sessionId}
-        api={props.apiUrl}
-        info={props.sessionInfo}
-        messages={messagesStore}
-      />
+      <div ref={shareRef}>
+        <Share
+          id={props.sessionId}
+          api={props.apiUrl}
+          info={props.sessionInfo}
+          messages={messagesStore}
+        />
+      </div>
       <MessageInput
         sessionId={props.sessionId}
         apiUrl={props.apiUrl}
