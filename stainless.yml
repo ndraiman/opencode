@@ -90,7 +90,7 @@ resources:
       chat: post /session/{id}/message
       export: post /session/{id}/export
       listExported: get /session/export
-      getExported: post /session/{id}/exported
+      getExported: get /session/{id}/export
 
 settings:
   disable_mock_tests: true

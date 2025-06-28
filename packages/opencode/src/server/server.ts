@@ -517,8 +517,8 @@ export namespace Server {
           return c.json(exportedSessions)
         },
       )
-      .post(
-        "/session/:id/exported",
+      .get(
+        "/session/:id/export",
         describeRoute({
           description: "Get exported session data",
           responses: {
