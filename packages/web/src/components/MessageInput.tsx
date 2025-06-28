@@ -1,5 +1,8 @@
 import { createSignal, Show, createMemo } from "solid-js"
-import { sendMessageToSession, type ProvidersResponse } from "../lib/local-session-utils"
+import {
+  sendMessageToSession,
+  type ProvidersResponse,
+} from "../lib/local-session-utils"
 import type { Message } from "opencode/session/message"
 
 interface MessageInputProps {
@@ -19,20 +22,26 @@ export default function MessageInput(props: MessageInputProps) {
   const [isSending, setIsSending] = createSignal(false)
   const [error, setError] = createSignal<string | null>(null)
   const [success, setSuccess] = createSignal(false)
-  
+
   // Get model from last message if available
   const getLastMessageModel = () => {
-    const messages = Object.values(props.messages).sort((a, b) => 
-      (a.metadata?.time?.created || 0) - (b.metadata?.time?.created || 0)
+    const messages = Object.values(props.messages).sort(
+      (a, b) =>
+        (a.metadata?.time?.created || 0) - (b.metadata?.time?.created || 0),
     )
-    const lastAssistantMessage = messages.reverse().find(msg => msg.role === "assistant")
-    
-    if (lastAssistantMessage?.metadata?.assistant?.providerID && 
-        lastAssistantMessage?.metadata?.assistant?.modelID) {
-      return {
+    const lastAssistantMessage = messages
+      .reverse()
+      .find((msg) => msg.role === "assistant")
+
+    if (
+      lastAssistantMessage?.metadata?.assistant?.providerID &&
+      lastAssistantMessage?.metadata?.assistant?.modelID
+    ) {
+      const result = {
         providerID: lastAssistantMessage.metadata.assistant.providerID,
-        modelID: lastAssistantMessage.metadata.assistant.modelID
+        modelID: lastAssistantMessage.metadata.assistant.modelID,
       }
+      return result
     }
     return null
   }
@@ -41,47 +50,95 @@ export default function MessageInput(props: MessageInputProps) {
   const getDefaultModel = () => {
     // Try to use last message model first
     const lastModel = getLastMessageModel()
-    if (lastModel) return lastModel
-    
+    if (lastModel) {
+      return lastModel
+    }
+
     // Fall back to first available model from providers data
-    if (props.providersData?.providers && props.providersData.providers.length > 0) {
+    if (
+      props.providersData?.providers &&
+      props.providersData.providers.length > 0
+    ) {
       const firstProvider = props.providersData.providers[0]
       const modelIds = Object.keys(firstProvider.models)
       if (modelIds.length > 0) {
         return { providerID: firstProvider.id, modelID: modelIds[0] }
       }
     }
-    
+
     // Final fallback to legacy models prop
     const modelEntries = Object.values(props.models)
     if (modelEntries.length > 0) {
       const [providerID, modelID] = modelEntries[0]
       return { providerID, modelID }
     }
-    
+
     // Hard fallback
-    return { providerID: "anthropic", modelID: "claude-3-5-sonnet-20241022" }
+    return {
+      providerID: "anthropic",
+      modelID: "claude-sonnet-4-20250514",
+    }
   }
 
   const [selectedModel, setSelectedModel] = createSignal(getDefaultModel())
 
   // Available models from providers data
   const availableModels = createMemo(() => {
-    if (!props.providersData?.providers) return []
-    
-    const models: Array<{ providerID: string, modelID: string, displayName: string }> = []
-    
-    props.providersData.providers.forEach(provider => {
+    console.log("[MessageInput] Computing available models...")
+    if (!props.providersData?.providers) {
+      console.log("[MessageInput] No providers data available")
+      return []
+    }
+
+    const models: Array<{
+      providerID: string
+      modelID: string
+      displayName: string
+    }> = []
+
+    props.providersData.providers.forEach((provider) => {
       Object.entries(provider.models).forEach(([modelId, model]) => {
-        models.push({
+        const modelInfo = {
           providerID: provider.id,
           modelID: modelId,
-          displayName: `${provider.name} / ${model.name}`
-        })
+          displayName: `${provider.name} / ${model.name}`,
+        }
+        models.push(modelInfo)
       })
     })
-    
+
     return models
+  })
+
+  // Update selected model when providers data changes or ensure it's valid
+  const validSelectedModel = createMemo(() => {
+    const current = selectedModel()
+    const available = availableModels()
+
+    // Check if current selection is in available models
+    const isValid = available.some(
+      (model) =>
+        model.providerID === current.providerID &&
+        model.modelID === current.modelID,
+    )
+
+    if (isValid) {
+      return current
+    }
+
+    // If not valid and we have available models, use the first one
+    if (available.length > 0) {
+      const firstModel = available[0]
+      const newSelection = {
+        providerID: firstModel.providerID,
+        modelID: firstModel.modelID,
+      }
+      setSelectedModel(newSelection)
+      return newSelection
+    }
+
+    // Fall back to current selection if no available models
+    return current
   })
 
   const handleSubmit = async (e: Event) => {
@@ -94,7 +151,7 @@ export default function MessageInput(props: MessageInputProps) {
     setSuccess(false)
 
     try {
-      const { providerID, modelID } = selectedModel()
+      const { providerID, modelID } = validSelectedModel()
 
       let hasRefreshedForUserMessage = false
 
@@ -157,23 +214,27 @@ export default function MessageInput(props: MessageInputProps) {
         <div class="message-input-footer">
           <div class="message-input-model-selector">
             <span data-element-label>Model</span>
-            <Show when={availableModels().length > 0} fallback={
-              <span class="model-fallback">
-                {selectedModel().providerID}/{selectedModel().modelID}
-              </span>
-            }>
+            <Show
+              when={availableModels().length > 0}
+              fallback={
+                <span class="model-fallback">
+                  {selectedModel().providerID}/{selectedModel().modelID}
+                </span>
+              }
+            >
               <select
-                value={`${selectedModel().providerID}/${selectedModel().modelID}`}
+                value={`${validSelectedModel().providerID}|||${validSelectedModel().modelID}`}
                 onChange={(e) => {
-                  const [providerID, modelID] = e.currentTarget.value.split('/')
+                  const [providerID, modelID] =
+                    e.currentTarget.value.split("|||")
                   setSelectedModel({ providerID, modelID })
                 }}
                 disabled={isSending()}
                 class="model-select"
                 data-disabled={isSending()}
               >
-                {availableModels().map(model => (
-                  <option value={`${model.providerID}/${model.modelID}`}>
+                {availableModels().map((model) => (
+                  <option value={`${model.providerID}|||${model.modelID}`}>
                     {model.displayName}
                   </option>
                 ))}
