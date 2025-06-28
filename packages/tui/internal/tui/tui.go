@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -525,10 +528,13 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 		}
 
 		// TODO: Need to regenerate client SDK to support this
-		response, err := a.app.Client.Session.Export(
-			context.Background(),
-			a.app.Session.ID,
-		)
+		// response, err := a.app.Client.Session.Export(
+		//     context.Background(),
+		//     a.app.Session.ID,
+		// )
+
+		// Temporary HTTP call until SDK is regenerated
+		response, err := httpExportSession(a.app.Session.ID)
 		if err != nil {
 			slog.Error("Failed to export session locally", "error", err)
 			return a, toast.NewErrorToast("Failed to export session locally")
@@ -635,6 +641,49 @@ func (a appModel) updateCompletions(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.completions.SetProvider(provider)
 	}
 	return a.completions.Update(msg)
+}
+
+// TODO: Remove this helper function when SDK is regenerated with export support
+func httpExportSession(sessionID string) (*struct {
+	JSON200 *struct {
+		LocalUrl string
+	}
+}, error) {
+	client := http.Client{Timeout: 10 * time.Second}
+	reqBody := map[string]string{"sessionID": sessionID}
+	jsonBody, _ := json.Marshal(reqBody)
+	
+	resp, err := client.Post(
+		"http://localhost:4096/session/"+sessionID+"/export",
+		"application/json",
+		bytes.NewBuffer(jsonBody),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != 200 {
+		return nil, err
+	}
+	
+	var result struct {
+		LocalUrl   string `json:"localUrl"`
+		ExportPath string `json:"exportPath"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	
+	return &struct {
+		JSON200 *struct {
+			LocalUrl string
+		}
+	}{
+		JSON200: &struct {
+			LocalUrl string
+		}{LocalUrl: result.LocalUrl},
+	}, nil
 }
 
 func NewModel(app *app.App) tea.Model {
