@@ -1,7 +1,7 @@
 ---
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 import SessionsList from "../../components/SessionsList.tsx";
-import { fetchExportedSessions, computeSessionData } from "../../lib/local-session-utils";
+import { fetchProjectSessions, computeSessionData } from "../../lib/local-session-utils";
 
 const localApiUrl = import.meta.env.VITE_LOCAL_API_URL || "http://localhost:4096";
 
@@ -9,54 +9,48 @@ let sessions = [];
 let error = null;
 
 try {
-  const exportedSessionList = await fetchExportedSessions(localApiUrl);
+  const sessionList = await fetchProjectSessions(localApiUrl);
   
-  const exportedSessionsWithData = exportedSessionList.map((exportData: any) => {
-    const session = exportData.session || exportData;
-    const messages = exportData.messages || [];
-    const computedData = computeSessionData(session, messages);
+  const sessionsWithData = sessionList.map((session: any) => {
+    // For project sessions, we don't have full message data, so we use session info
+    const computedData = {
+      rootDir: session.path?.root,
+      created: session.time.created,
+      completed: session.time.completed,
+      models: {},
+      cost: 0,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+      },
+    };
     return { 
       ...session, 
-      computedData,
-      exportedAt: exportData.exportedAt
+      computedData
     };
   });
   
-  sessions = exportedSessionsWithData.sort((a: any, b: any) => b.time.updated - a.time.updated);
+  sessions = sessionsWithData.sort((a: any, b: any) => b.time.updated - a.time.updated);
 } catch (e) {
   error = e.message;
-}
-
-let storageLocation = 'config directory';
-try {
-  if (sessions.length > 0 && sessions[0].share?.url) {
-    const shareUrl = sessions[0].share.url;
-    if (shareUrl.startsWith('file://')) {
-      const filePath = shareUrl.replace('file://', '');
-      const configDir = filePath.substring(0, filePath.lastIndexOf('/'));
-      storageLocation = configDir;
-    }
-  }
-} catch (e) {
-  // Use default if we can't determine the path
 }
 
 const helpText = `
 <ol>
   <li>Start opencode server: <code>opencode serve</code></li>
   <li>Run opencode in another terminal to create sessions</li>
-  <li>Use <code>/export</code> command to export sessions for permanent local storage</li>
-  <li>View sessions here without sharing them remotely</li>
+  <li>Active project sessions appear here</li>
+  <li>Use <code>/export</code> command to move sessions to permanent local storage</li>
 </ol>
-<p><strong>Storage Location:</strong> Exported sessions are stored in: <code>${storageLocation}</code></p>
-<p><strong>Note:</strong> These sessions are stored permanently in your local config directory.</p>
+<p><strong>Note:</strong> These are active project sessions that may be cleaned up over time.</p>
 `;
 
 ---
 <StarlightPage
   hasSidebar={false}
   frontmatter={{
-    title: "Exported Sessions",
+    title: "Project Sessions",
     pagefind: false,
     template: "splash",
     tableOfContents: false,
@@ -65,7 +59,7 @@ const helpText = `
         tag: "meta",
         attrs: {
           name: "description",
-          content: "opencode - Local Session Browser",
+          content: "opencode - Project Session Browser",
         },
       },
     ],
@@ -73,12 +67,12 @@ const helpText = `
 >
   <SessionsList
     sessions={sessions}
-    title="Exported Sessions"
-    emptyMessage="No exported sessions found. Use /export command in opencode to export sessions here."
+    title="Project Sessions"
+    emptyMessage="No active project sessions found. Start opencode to create sessions."
     helpText={helpText}
     error={error}
     apiUrl={localApiUrl}
-    basePath="/local"
+    basePath="/project"
     client:only="solid"
   />
 </StarlightPage>
@@ -200,70 +194,4 @@ body > .page > .main-frame .main-pane > main > .content-panel + .content-panel {
   gap: 0.5rem;
   font-size: 0.875rem;
 }
-
-[data-section="stats"][data-section-root] li,
-[data-section="stats"][data-section-models] li {
-  gap: 0.3125rem;
-}
-
-[data-stat-icon] {
-  flex: 0 0 auto;
-  color: var(--sl-color-text-dimmed);
-  opacity: 0.85;
-}
-
-[data-stat-icon] svg {
-  display: block;
-}
-
-[data-element-label] {
-  text-transform: uppercase;
-  letter-spacing: -0.5px;
-  color: var(--sl-color-text-dimmed);
-}
-
-[data-placeholder] {
-  color: var(--sl-color-text-dimmed);
-}
-
-[data-stat-model] {
-  color: var(--sl-color-text);
-}
-
-[data-section="time"] {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.25rem;
-}
-
-[data-section="time"] span {
-  color: var(--sl-color-text-dimmed);
-  font-size: 0.875rem;
-}
-
-.help-section {
-  margin-top: 2rem;
-  padding: 1rem;
-  background: var(--sl-color-blue-low);
-  border: 1px solid var(--sl-color-blue);
-  border-radius: 8px;
-}
-
-.help-section h3 {
-  color: var(--sl-color-blue-high);
-  margin-top: 0;
-}
-
-.help-section ol {
-  color: var(--sl-color-gray-2);
-}
-
-.help-section code {
-  background: var(--sl-color-gray-6);
-  color: var(--sl-color-accent);
-  padding: 0.2em 0.4em;
-  border-radius: 4px;
-  font-family: var(--sl-font-mono);
-}
-</style>
+</style> 

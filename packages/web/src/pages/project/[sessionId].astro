@@ -1,15 +1,7 @@
 ---
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 import Share from "../../components/Share.tsx";
-import { fetchExportedSessions, fetchSessionMessages } from "../../lib/local-session-utils";
-import type { Session } from "@opencode/opencode/session";
-import type { Message } from "@opencode/opencode/session/message";
-
-interface ExportedSession {
-  session: Session.Info;
-  messages: Message.Info[];
-  exportedAt: number;
-}
+import { fetchProjectSessions, fetchSessionMessages } from "../../lib/local-session-utils";
 
 const localApiUrl = import.meta.env.VITE_LOCAL_API_URL || "http://localhost:4096";
 const { sessionId } = Astro.params;
@@ -19,22 +11,18 @@ let messages;
 let error = null;
 
 try {
-  const sessions = await fetchExportedSessions(localApiUrl);
+  const [sessions, messagesList] = await Promise.all([
+    fetchProjectSessions(localApiUrl),
+    fetchSessionMessages(localApiUrl, sessionId)
+  ]);
 
-  console.log(sessions)
-  // Find session from exported sessions structure
-  const exportedSession = sessions.find((exportData: ExportedSession) => 
-    exportData.session.id === sessionId
-  );
-  
-  console.log(exportedSession)
-  sessionInfo = exportedSession?.session;
-  messages = exportedSession?.messages;
+  sessionInfo = sessions.find((s: any) => s.id === sessionId);
+  messages = messagesList;
 
   if (!sessionInfo) {
     return new Response(null, {
       status: 404,
-      statusText: 'Exported session not found'
+      statusText: 'Project session not found'
     });
   }
 } catch (e) {
@@ -66,7 +54,7 @@ messages.forEach((msg: any) => {
         tag: "meta",
         attrs: {
           name: "description",
-          content: "opencode - Exported Session Viewer",
+          content: "opencode - Project Session Viewer",
         },
       },
     ],
@@ -92,4 +80,4 @@ body > .page > .main-frame .main-pane > main > .content-panel + .content-panel {
   border-top: none !important;
   padding: 0;
 }
-</style>
+</style> 

@@ -56,7 +56,7 @@ export function computeSessionData(
   return result
 }
 
-export async function fetchLocalSessions(localApiUrl: string) {
+export async function fetchProjectSessions(localApiUrl: string) {
   const response = await fetch(`${localApiUrl}/session`, {
     method: "GET",
   })

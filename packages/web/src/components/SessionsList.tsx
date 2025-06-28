@@ -30,6 +30,7 @@ interface SessionsListProps {
   helpText?: string
   error?: string | null
   apiUrl?: string
+  basePath?: string
 }
 
 export default function SessionsList(props: SessionsListProps) {
@@ -57,7 +58,10 @@ export default function SessionsList(props: SessionsListProps) {
                   <div class="session-item">
                     <div class="session-title">
                       <h3>
-                        <a href={`/local/${session.id}`} class="session-link">
+                        <a
+                          href={`${props.basePath}/${session.id}`}
+                          class="session-link"
+                        >
                           {session.title?.trim() || "(no title)"}
                         </a>
                       </h3>
