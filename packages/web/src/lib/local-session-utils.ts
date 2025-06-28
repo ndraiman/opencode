@@ -1,17 +1,20 @@
 export interface SessionData {
-  rootDir: string | undefined;
-  created: number;
-  completed: number | undefined;
-  models: Record<string, string[]>;
-  cost: number;
+  rootDir: string | undefined
+  created: number
+  completed: number | undefined
+  models: Record<string, string[]>
+  cost: number
   tokens: {
-    input: number;
-    output: number;
-    reasoning: number;
-  };
+    input: number
+    output: number
+    reasoning: number
+  }
 }
 
-export function computeSessionData(sessionInfo: any, messages: any[]): SessionData {
+export function computeSessionData(
+  sessionInfo: any,
+  messages: any[],
+): SessionData {
   const result: SessionData = {
     rootDir: undefined,
     created: sessionInfo.time.created,
@@ -23,66 +26,72 @@ export function computeSessionData(sessionInfo: any, messages: any[]): SessionDa
       output: 0,
       reasoning: 0,
     },
-  };
+  }
 
   for (const msg of messages) {
-    const assistant = msg.metadata?.assistant;
+    const assistant = msg.metadata?.assistant
     if (assistant) {
-      result.cost += assistant.cost || 0;
-      result.tokens.input += assistant.tokens?.input || 0;
-      result.tokens.output += assistant.tokens?.output || 0;
-      result.tokens.reasoning += assistant.tokens?.reasoning || 0;
+      result.cost += assistant.cost || 0
+      result.tokens.input += assistant.tokens?.input || 0
+      result.tokens.output += assistant.tokens?.output || 0
+      result.tokens.reasoning += assistant.tokens?.reasoning || 0
 
       if (assistant.providerID && assistant.modelID) {
         result.models[`${assistant.providerID} ${assistant.modelID}`] = [
           assistant.providerID,
           assistant.modelID,
-        ];
+        ]
       }
 
       if (assistant.path?.root) {
-        result.rootDir = assistant.path.root;
+        result.rootDir = assistant.path.root
       }
 
       if (msg.metadata?.time?.completed) {
-        result.completed = msg.metadata.time.completed;
+        result.completed = msg.metadata.time.completed
       }
     }
   }
 
-  return result;
+  return result
 }
 
 export async function fetchLocalSessions(localApiUrl: string) {
-  const response = await fetch(`${localApiUrl}/session_list`, { method: 'POST' });
-  
+  const response = await fetch(`${localApiUrl}/session`, {
+    method: "GET",
+  })
+
   if (!response.ok) {
-    throw new Error('Failed to fetch sessions');
+    throw new Error("Failed to fetch sessions")
   }
-  
-  return await response.json();
+
+  return await response.json()
 }
 
-export async function fetchSessionMessages(localApiUrl: string, sessionId: string) {
-  const response = await fetch(`${localApiUrl}/session_messages`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionID: sessionId })
-  });
-  
+export async function fetchSessionMessages(
+  localApiUrl: string,
+  sessionId: string,
+) {
+  const response = await fetch(`${localApiUrl}/session/${sessionId}/message`, {
+    method: "get",
+    headers: { "Content-Type": "application/json" },
+  })
+
   if (!response.ok) {
-    throw new Error('Failed to fetch session messages');
+    throw new Error("Failed to fetch session messages")
   }
-  
-  return await response.json();
+
+  return await response.json()
 }
 
 export async function fetchExportedSessions(localApiUrl: string) {
-  const response = await fetch(`${localApiUrl}/session_list_exported`, { method: 'POST' });
-  
+  const response = await fetch(`${localApiUrl}/session/export`, {
+    method: "GET",
+  })
+
   if (!response.ok) {
-    return [];
+    return []
   }
-  
-  return await response.json();
+
+  return await response.json()
 }
