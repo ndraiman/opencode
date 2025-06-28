@@ -40,15 +40,22 @@ export default function MessageInput(props: MessageInputProps) {
     try {
       const { providerID, modelID } = getDefaultModel()
 
+      let hasRefreshedForUserMessage = false
+
       await sendMessageToSession(
         props.apiUrl,
         props.sessionId,
         messageText,
         providerID,
         modelID,
-        // onDelta: Just update the assistant message the server gives us
+        // onDelta: Update assistant message and refresh to get user message on first delta
         (delta: string, fullText: string, messageId?: string) => {
           if (messageId) {
+            // On first delta, refresh to get the user message the server created
+            if (!hasRefreshedForUserMessage) {
+              hasRefreshedForUserMessage = true
+              props.onMessageSent?.()
+            }
             props.onStreamingUpdate?.(messageId, fullText)
           }
         },
