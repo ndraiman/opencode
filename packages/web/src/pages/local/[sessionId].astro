@@ -1,7 +1,8 @@
 ---
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 import Share from "../../components/Share.tsx";
-import { fetchExportedSessions, fetchSessionMessages } from "../../lib/local-session-utils";
+import MessageInput from "../../components/MessageInput.tsx";
+import { fetchExportedSessions, fetchSessionMessages, computeSessionData } from "../../lib/local-session-utils";
 import type { Session } from "@opencode/opencode/session";
 import type { Message } from "@opencode/opencode/session/message";
 
@@ -51,6 +52,9 @@ messages.forEach((msg: any) => {
   messagesObj[msg.id] = msg;
 });
 
+// Compute session data to get models information
+const sessionData = computeSessionData(sessionInfo, messages);
+
 ---
 <StarlightPage
   hasSidebar={false}
@@ -75,6 +79,12 @@ messages.forEach((msg: any) => {
     api={localApiUrl}
     info={sessionInfo}
     messages={messagesObj}
+    client:only="solid"
+  />
+  <MessageInput
+    sessionId={sessionId}
+    apiUrl={localApiUrl}
+    models={sessionData.models}
     client:only="solid"
   />
 </StarlightPage>

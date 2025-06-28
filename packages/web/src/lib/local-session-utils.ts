@@ -95,3 +95,32 @@ export async function fetchExportedSessions(localApiUrl: string) {
 
   return await response.json()
 }
+
+export async function sendMessageToSession(
+  localApiUrl: string,
+  sessionId: string,
+  message: string,
+  providerID: string,
+  modelID: string,
+) {
+  const response = await fetch(`${localApiUrl}/session/${sessionId}/message`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      providerID,
+      modelID,
+      parts: [
+        {
+          type: "text",
+          text: message,
+        },
+      ],
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error("Failed to send message")
+  }
+
+  return await response.json()
+}
