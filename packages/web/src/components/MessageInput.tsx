@@ -369,8 +369,8 @@ export default function MessageInput(props: MessageInputProps) {
             border-color 0.15s ease,
             background-color 0.15s ease,
             box-shadow 0.15s ease;
-          max-width: 220px;
-          min-width: 160px;
+          min-width: 220px;
+          width: auto;
           appearance: none;
           background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L2 4h8z'/%3E%3C/svg%3E");
           background-repeat: no-repeat;
@@ -494,6 +494,7 @@ export default function MessageInput(props: MessageInputProps) {
 
           .model-select {
             max-width: none;
+            width: 100%;
             flex: 1;
             margin-left: 0.5rem;
           }
