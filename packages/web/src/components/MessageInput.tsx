@@ -1,11 +1,14 @@
-import { createSignal, Show } from "solid-js"
-import { sendMessageToSession } from "../lib/local-session-utils"
+import { createSignal, Show, createMemo } from "solid-js"
+import { sendMessageToSession, type ProvidersResponse } from "../lib/local-session-utils"
 import type { Message } from "opencode/session/message"
 
 interface MessageInputProps {
   sessionId: string
   apiUrl: string
   models: Record<string, string[]>
+  providersData: ProvidersResponse | null
+  providersError: string | null
+  messages: Record<string, Message.Info>
   onMessageSent?: () => void
   onMessageComplete?: (message: Message.Info) => void
   onStreamingUpdate?: (assistantMessageId: string, text: string) => void
@@ -16,17 +19,70 @@ export default function MessageInput(props: MessageInputProps) {
   const [isSending, setIsSending] = createSignal(false)
   const [error, setError] = createSignal<string | null>(null)
   const [success, setSuccess] = createSignal(false)
+  
+  // Get model from last message if available
+  const getLastMessageModel = () => {
+    const messages = Object.values(props.messages).sort((a, b) => 
+      (a.metadata?.time?.created || 0) - (b.metadata?.time?.created || 0)
+    )
+    const lastAssistantMessage = messages.reverse().find(msg => msg.role === "assistant")
+    
+    if (lastAssistantMessage?.metadata?.assistant?.providerID && 
+        lastAssistantMessage?.metadata?.assistant?.modelID) {
+      return {
+        providerID: lastAssistantMessage.metadata.assistant.providerID,
+        modelID: lastAssistantMessage.metadata.assistant.modelID
+      }
+    }
+    return null
+  }
 
-  // Get the first available model from the session
+  // Get the first available model from providers data
   const getDefaultModel = () => {
+    // Try to use last message model first
+    const lastModel = getLastMessageModel()
+    if (lastModel) return lastModel
+    
+    // Fall back to first available model from providers data
+    if (props.providersData?.providers && props.providersData.providers.length > 0) {
+      const firstProvider = props.providersData.providers[0]
+      const modelIds = Object.keys(firstProvider.models)
+      if (modelIds.length > 0) {
+        return { providerID: firstProvider.id, modelID: modelIds[0] }
+      }
+    }
+    
+    // Final fallback to legacy models prop
     const modelEntries = Object.values(props.models)
     if (modelEntries.length > 0) {
       const [providerID, modelID] = modelEntries[0]
       return { providerID, modelID }
     }
-    // Fallback to anthropic claude if no models found
+    
+    // Hard fallback
     return { providerID: "anthropic", modelID: "claude-3-5-sonnet-20241022" }
   }
+
+  const [selectedModel, setSelectedModel] = createSignal(getDefaultModel())
+
+  // Available models from providers data
+  const availableModels = createMemo(() => {
+    if (!props.providersData?.providers) return []
+    
+    const models: Array<{ providerID: string, modelID: string, displayName: string }> = []
+    
+    props.providersData.providers.forEach(provider => {
+      Object.entries(provider.models).forEach(([modelId, model]) => {
+        models.push({
+          providerID: provider.id,
+          modelID: modelId,
+          displayName: `${provider.name} / ${model.name}`
+        })
+      })
+    })
+    
+    return models
+  })
 
   const handleSubmit = async (e: Event) => {
     e.preventDefault()
@@ -38,7 +94,7 @@ export default function MessageInput(props: MessageInputProps) {
     setSuccess(false)
 
     try {
-      const { providerID, modelID } = getDefaultModel()
+      const { providerID, modelID } = selectedModel()
 
       let hasRefreshedForUserMessage = false
 
@@ -99,11 +155,30 @@ export default function MessageInput(props: MessageInputProps) {
         </div>
 
         <div class="message-input-footer">
-          <div class="message-input-model-info">
-            <span data-element-label>Using</span>
-            <span>
-              {getDefaultModel().providerID}/{getDefaultModel().modelID}
-            </span>
+          <div class="message-input-model-selector">
+            <span data-element-label>Model</span>
+            <Show when={availableModels().length > 0} fallback={
+              <span class="model-fallback">
+                {selectedModel().providerID}/{selectedModel().modelID}
+              </span>
+            }>
+              <select
+                value={`${selectedModel().providerID}/${selectedModel().modelID}`}
+                onChange={(e) => {
+                  const [providerID, modelID] = e.currentTarget.value.split('/')
+                  setSelectedModel({ providerID, modelID })
+                }}
+                disabled={isSending()}
+                class="model-select"
+                data-disabled={isSending()}
+              >
+                {availableModels().map(model => (
+                  <option value={`${model.providerID}/${model.modelID}`}>
+                    {model.displayName}
+                  </option>
+                ))}
+              </select>
+            </Show>
           </div>
 
           <button
@@ -212,12 +287,77 @@ export default function MessageInput(props: MessageInputProps) {
           gap: 1rem;
         }
 
-        .message-input-model-info {
+        .message-input-model-selector {
           display: flex;
           align-items: center;
           gap: 0.375rem;
           font-size: 0.75rem;
           color: var(--sl-color-text-secondary);
+        }
+
+        .model-select {
+          padding: 0.375rem 0.75rem;
+          background-color: var(--sl-color-bg-surface);
+          color: var(--sl-color-text);
+          border: 1px solid var(--sl-color-divider);
+          border-radius: 0.375rem;
+          font-size: 0.75rem;
+          font-family: inherit;
+          cursor: pointer;
+          transition: 
+            border-color 0.15s ease,
+            background-color 0.15s ease,
+            box-shadow 0.15s ease;
+          max-width: 220px;
+          min-width: 160px;
+          appearance: none;
+          background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L2 4h8z'/%3E%3C/svg%3E");
+          background-repeat: no-repeat;
+          background-position: right 0.5rem center;
+          background-size: 12px;
+          padding-right: 2rem;
+        }
+
+        .model-select:hover:not([data-disabled="true"]) {
+          border-color: var(--sl-color-blue-low);
+          background-color: var(--sl-color-bg-nav);
+        }
+
+        .model-select:focus {
+          outline: 2px solid var(--sl-color-blue);
+          outline-offset: -2px;
+          border-color: var(--sl-color-blue);
+          box-shadow: 0 0 0 2px var(--sl-color-blue-low);
+        }
+
+        .model-select[data-disabled="true"] {
+          background-color: var(--sl-color-bg-nav);
+          color: var(--sl-color-text-dimmed);
+          cursor: not-allowed;
+          border-color: var(--sl-color-divider);
+          background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23999' d='M6 8L2 4h8z'/%3E%3C/svg%3E");
+        }
+
+        /* Dark mode support for dropdown arrow */
+        @media (prefers-color-scheme: dark) {
+          .model-select {
+            background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23ccc' d='M6 8L2 4h8z'/%3E%3C/svg%3E");
+          }
+          
+          .model-select[data-disabled="true"] {
+            background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L2 4h8z'/%3E%3C/svg%3E");
+          }
+        }
+
+        .model-fallback {
+          font-family: var(--sl-font-mono, monospace);
+          background-color: var(--sl-color-bg-nav);
+          color: var(--sl-color-text-secondary);
+          padding: 0.375rem 0.75rem;
+          border-radius: 0.375rem;
+          font-size: 0.75rem;
+          border: 1px solid var(--sl-color-divider);
+          display: inline-block;
         }
 
         .message-input-submit {
@@ -285,6 +425,16 @@ export default function MessageInput(props: MessageInputProps) {
           .message-input-footer {
             flex-direction: column;
             align-items: stretch;
+          }
+
+          .message-input-model-selector {
+            justify-content: space-between;
+          }
+
+          .model-select {
+            max-width: none;
+            flex: 1;
+            margin-left: 0.5rem;
           }
 
           .message-input-submit {

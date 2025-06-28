@@ -143,6 +143,53 @@ export async function sendMessageToSession(
   return await response.json()
 }
 
+export interface ModelInfo {
+  id: string
+  name: string
+  attachment: boolean
+  reasoning: boolean
+  temperature: boolean
+  tool_call: boolean
+  cost: {
+    input: number
+    output: number
+    cache_read?: number
+    cache_write?: number
+  }
+  limit: {
+    context: number
+    output: number
+  }
+  options: Record<string, any>
+}
+
+export interface ProviderInfo {
+  id: string
+  name: string
+  api?: string
+  env: string[]
+  npm?: string
+  models: Record<string, ModelInfo>
+}
+
+export interface ProvidersResponse {
+  providers: ProviderInfo[]
+  default: Record<string, string>
+}
+
+export async function fetchProviders(localApiUrl: string): Promise<ProvidersResponse> {
+  const response = await fetch(`${localApiUrl}/config/providers`, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  })
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch providers")
+  }
+
+  return await response.json()
+}
+
 export async function sendMessageToSessionStream(
   localApiUrl: string,
   sessionId: string,
