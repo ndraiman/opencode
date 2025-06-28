@@ -49,8 +49,33 @@ export default function SessionViewer(props: SessionViewerProps) {
     setRefreshTrigger((prev) => prev + 1)
   }
 
+  const handleStreamingUpdate = (assistantMessageId: string, text: string) => {
+    // Create or update the assistant message during streaming
+    setMessagesStore(assistantMessageId, (prev) => {
+      if (prev) {
+        // Update existing message
+        return {
+          ...prev,
+          parts: [{ type: "text", text }],
+        }
+      } else {
+        // Create new message on first update
+        return {
+          id: assistantMessageId,
+          role: "assistant",
+          parts: [{ type: "text", text }],
+          metadata: {
+            sessionID: props.sessionId,
+            time: { created: Date.now() },
+            tool: {},
+          },
+        }
+      }
+    })
+  }
+
   const handleMessageComplete = (message: Message.Info) => {
-    // Add the complete message from server immediately
+    // Replace optimistic message with real server message
     if (message && message.id) {
       setMessagesStore(message.id, message)
     }
@@ -70,6 +95,7 @@ export default function SessionViewer(props: SessionViewerProps) {
         models={props.models}
         onMessageSent={handleMessageSent}
         onMessageComplete={handleMessageComplete}
+        onStreamingUpdate={handleStreamingUpdate}
       />
     </div>
   )

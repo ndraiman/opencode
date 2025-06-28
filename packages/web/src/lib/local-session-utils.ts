@@ -102,7 +102,7 @@ export async function sendMessageToSession(
   message: string,
   providerID: string,
   modelID: string,
-  onDelta?: (delta: string, fullText: string) => void,
+  onDelta?: (delta: string, fullText: string, messageId?: string) => void,
   onComplete?: (message: any) => void,
   onError?: (error: Error) => void,
 ) {
@@ -116,7 +116,7 @@ export async function sendMessageToSession(
       modelID,
       onDelta,
       onComplete,
-      onError
+      onError,
     )
   }
 
@@ -149,7 +149,7 @@ export async function sendMessageToSessionStream(
   message: string,
   providerID: string,
   modelID: string,
-  onDelta: (delta: string, fullText: string) => void,
+  onDelta: (delta: string, fullText: string, messageId?: string) => void,
   onComplete?: (message: any) => void,
   onError?: (error: Error) => void,
 ) {
@@ -165,14 +165,17 @@ export async function sendMessageToSessionStream(
   })
 
   try {
-    const response = await fetch(`${localApiUrl}/session/${sessionId}/message`, {
-      method: "POST",
-      headers: { 
-        "Content-Type": "application/json",
-        "Accept": "text/event-stream"
+    const response = await fetch(
+      `${localApiUrl}/session/${sessionId}/message`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+        },
+        body: requestBody,
       },
-      body: requestBody,
-    })
+    )
 
     if (!response.ok) {
       throw new Error(`Failed to send message: ${response.status}`)
@@ -191,18 +194,18 @@ export async function sendMessageToSessionStream(
       if (done) break
 
       buffer += decoder.decode(value, { stream: true })
-      
+
       // Process complete SSE messages
-      const lines = buffer.split('\n')
+      const lines = buffer.split("\n")
       buffer = lines.pop() || "" // Keep incomplete line in buffer
 
       for (const line of lines) {
-        if (line.startsWith('data: ')) {
+        if (line.startsWith("data: ")) {
           try {
             const data = JSON.parse(line.slice(6))
-            
+
             if (data.type === "delta") {
-              onDelta(data.content, data.fullText)
+              onDelta(data.content, data.fullText, data.messageId)
             } else if (data.type === "complete") {
               onComplete?.(data.message)
               return data.message

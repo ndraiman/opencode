@@ -618,6 +618,12 @@ export default function Share(props: {
     info?: Session.Info
     messages: Record<string, Message.Info>
   }>({ info: props.info, messages: props.messages })
+
+  // Update store when props change (for local sessions)
+  createEffect(() => {
+    setStore("messages", reconcile(props.messages))
+  })
+
   const messages = createMemo(() =>
     Object.values(store.messages).toSorted((a, b) => a.id?.localeCompare(b.id)),
   )
@@ -727,7 +733,8 @@ export default function Share(props: {
     const currentScrollY = window.scrollY
     const isScrollingDown = currentScrollY > lastScrollY
     const scrolled = currentScrollY > 200 // Show after scrolling 200px
-    const isNearBottom = window.innerHeight + currentScrollY >= document.body.scrollHeight - 100
+    const isNearBottom =
+      window.innerHeight + currentScrollY >= document.body.scrollHeight - 100
 
     // Only show when scrolling down, scrolled enough, and not near bottom
     const shouldShow = isScrollingDown && scrolled && !isNearBottom
@@ -881,7 +888,6 @@ export default function Share(props: {
               </span>
             )}
           </div>
-
         </div>
       </div>
 
@@ -1241,9 +1247,9 @@ export default function Share(props: {
                             const path = createMemo(() =>
                               toolData()?.args?.path !== data().rootDir
                                 ? stripWorkingDirectory(
-                                  toolData()?.args?.path,
-                                  data().rootDir,
-                                )
+                                    toolData()?.args?.path,
+                                    data().rootDir,
+                                  )
                                 : toolData()?.args?.path,
                             )
 
@@ -1451,7 +1457,7 @@ export default function Share(props: {
                                         <div data-part-tool-result>
                                           <ErrorPart>
                                             {formatErrorString(
-                                              toolData()?.result
+                                              toolData()?.result,
                                             )}
                                           </ErrorPart>
                                         </div>
