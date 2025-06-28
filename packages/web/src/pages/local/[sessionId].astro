@@ -1,7 +1,6 @@
 ---
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
-import Share from "../../components/Share.tsx";
-import MessageInput from "../../components/MessageInput.tsx";
+import SessionViewer from "../../components/SessionViewer.tsx";
 import { fetchExportedSessions, fetchSessionMessages, computeSessionData } from "../../lib/local-session-utils";
 import type { Session } from "@opencode/opencode/session";
 import type { Message } from "@opencode/opencode/session/message";
@@ -74,16 +73,11 @@ const sessionData = computeSessionData(sessionInfo, messages);
     ],
   }}
 >
-  <Share
-    id={sessionId}
-    api={localApiUrl}
-    info={sessionInfo}
-    messages={messagesObj}
-    client:only="solid"
-  />
-  <MessageInput
+  <SessionViewer
     sessionId={sessionId}
     apiUrl={localApiUrl}
+    sessionInfo={sessionInfo}
+    initialMessages={messagesObj}
     models={sessionData.models}
     client:only="solid"
   />
