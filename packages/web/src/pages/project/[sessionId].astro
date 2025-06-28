@@ -1,7 +1,7 @@
 ---
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
-import Share from "../../components/Share.tsx";
-import { fetchProjectSessions, fetchSessionMessages } from "../../lib/local-session-utils";
+import SessionViewer from "../../components/SessionViewer.tsx";
+import { fetchProjectSessions, fetchSessionMessages, computeSessionData } from "../../lib/local-session-utils";
 
 const localApiUrl = import.meta.env.VITE_LOCAL_API_URL || "http://localhost:4096";
 const { sessionId } = Astro.params;
@@ -41,6 +41,8 @@ messages.forEach((msg: any) => {
   messagesObj[msg.id] = msg;
 });
 
+const sessionData = computeSessionData(sessionInfo, messages);
+
 ---
 <StarlightPage
   hasSidebar={false}
@@ -60,11 +62,12 @@ messages.forEach((msg: any) => {
     ],
   }}
 >
-  <Share
-    id={sessionId}
-    api={localApiUrl}
-    info={sessionInfo}
-    messages={messagesObj}
+  <SessionViewer
+    sessionId={sessionId}
+    apiUrl={localApiUrl}
+    sessionInfo={sessionInfo}
+    initialMessages={messagesObj}
+    models={sessionData.models}
     client:only="solid"
   />
 </StarlightPage>
