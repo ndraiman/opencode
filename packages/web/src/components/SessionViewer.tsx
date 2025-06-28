@@ -1,8 +1,8 @@
-import { onCleanup } from "solid-js"
+import { onCleanup, createSignal, onMount } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import Share from "./Share"
 import MessageInput from "./MessageInput"
-import { fetchSessionMessages } from "../lib/local-session-utils"
+import { fetchSessionMessages, fetchProviders, type ProvidersResponse } from "../lib/local-session-utils"
 import type { Message } from "opencode/session/message"
 import type { Session } from "opencode/session/index"
 
@@ -18,9 +18,23 @@ export default function SessionViewer(props: SessionViewerProps) {
   const [messagesStore, setMessagesStore] = createStore<
     Record<string, Message.Info>
   >(props.initialMessages)
+  
+  const [providersData, setProvidersData] = createSignal<ProvidersResponse | null>(null)
+  const [providersError, setProvidersError] = createSignal<string | null>(null)
 
   let shareRef: HTMLDivElement | undefined
   let resizeObserver: ResizeObserver | undefined
+
+  // Fetch providers data on mount
+  onMount(async () => {
+    try {
+      const providers = await fetchProviders(props.apiUrl)
+      setProvidersData(providers)
+    } catch (error) {
+      console.error("Failed to fetch providers:", error)
+      setProvidersError(error instanceof Error ? error.message : "Failed to fetch providers")
+    }
+  })
 
   // Auto-scroll function - only if user is near bottom
   const scrollToBottom = () => {
@@ -147,6 +161,9 @@ export default function SessionViewer(props: SessionViewerProps) {
         sessionId={props.sessionId}
         apiUrl={props.apiUrl}
         models={props.models}
+        providersData={providersData()}
+        providersError={providersError()}
+        messages={messagesStore}
         onMessageSent={handleMessageSent}
         onMessageComplete={handleMessageComplete}
         onStreamingUpdate={handleStreamingUpdate}
