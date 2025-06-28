@@ -281,130 +281,7 @@ export namespace Server {
         },
       )
       .post(
-        "/session_export",
-        describeRoute({
-          description: "Export session to local storage",
-          responses: {
-            200: {
-              description: "Successfully exported session",
-              content: {
-                "application/json": {
-                  schema: resolver(
-                    z.object({
-                      localUrl: z.string(),
-                      exportPath: z.string(),
-                    }),
-                  ),
-                },
-              },
-            },
-          },
-        }),
-        zValidator(
-          "json",
-          z.object({
-            sessionID: z.string(),
-          }),
-        ),
-        async (c) => {
-          const body = c.req.valid("json")
-          const result = await Session.exportLocal(body.sessionID)
-          return c.json(result)
-        },
-      )
-      .post(
-        "/session_list",
-        describeRoute({
-          description: "List all sessions",
-          responses: {
-            200: {
-              description: "List of sessions",
-              content: {
-                "application/json": {
-                  schema: resolver(Session.Info.array()),
-                },
-              },
-            },
-          },
-        }),
-        async (c) => {
-          const sessions = await Array.fromAsync(Session.list())
-          return c.json(sessions)
-        },
-      )
-      .post(
-        "/session_list_exported",
-        describeRoute({
-          description: "List all exported sessions",
-          responses: {
-            200: {
-              description: "List of exported sessions",
-              content: {
-                "application/json": {
-                  schema: resolver(
-                    z.array(
-                      Session.Info.extend({
-                        exportedAt: z.number().optional(),
-                        exportPath: z.string().optional(),
-                      }),
-                    ),
-                  ),
-                },
-              },
-            },
-          },
-        }),
-        async (c) => {
-          const exportedSessions = await Session.listExported()
-          return c.json(exportedSessions)
-        },
-      )
-      .post(
-        "/session_exported",
-        describeRoute({
-          description: "Get exported session data",
-          responses: {
-            200: {
-              description: "Exported session data",
-              content: {
-                "application/json": {
-                  schema: resolver(
-                    z.object({
-                      session: Session.Info,
-                      messages: z.array(Message.Info),
-                      exportedAt: z.number(),
-                    }),
-                  ),
-                },
-              },
-            },
-            404: {
-              description: "Exported session not found",
-              content: {
-                "application/json": {
-                  schema: resolver(z.object({ error: z.string() })),
-                },
-              },
-            },
-          },
-        }),
-        zValidator(
-          "json",
-          z.object({
-            sessionID: z.string(),
-          }),
-        ),
-        async (c) => {
-          const body = c.req.valid("json")
-          const exportedData = await Session.getExported(body.sessionID)
-          if (!exportedData) {
-            return c.json({ error: "Exported session not found" }, 404)
-          }
-          return c.json(exportedData)
-        },
-      )
-      .delete(
-        "/session/:id/share",
+        "/session/:id/abort",
         describeRoute({
           description: "Abort a session",
           responses: {
@@ -456,8 +333,8 @@ export namespace Server {
           return c.json(session)
         },
       )
-      .post(
-        "/session_abort",
+      .delete(
+        "/session/:id/share",
         describeRoute({
           description: "Unshare the session",
           responses: {
@@ -579,6 +456,109 @@ export namespace Server {
           const body = c.req.valid("json")
           const msg = await Session.chat({ ...body, sessionID })
           return c.json(msg)
+        },
+      )
+      .post(
+        "/session/:id/export",
+        describeRoute({
+          description: "Export session to local storage",
+          responses: {
+            200: {
+              description: "Successfully exported session",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      localUrl: z.string(),
+                      exportPath: z.string(),
+                    }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "json",
+          z.object({
+            sessionID: z.string(),
+          }),
+        ),
+        async (c) => {
+          const body = c.req.valid("json")
+          const result = await Session.exportLocal(body.sessionID)
+          return c.json(result)
+        },
+      )
+      .get(
+        "/session/export",
+        describeRoute({
+          description: "List all exported sessions",
+          responses: {
+            200: {
+              description: "List of exported sessions",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.array(
+                      Session.Info.extend({
+                        exportedAt: z.number().optional(),
+                        exportPath: z.string().optional(),
+                      }),
+                    ),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const exportedSessions = await Session.listExported()
+          return c.json(exportedSessions)
+        },
+      )
+      .post(
+        "/session/:id/exported",
+        describeRoute({
+          description: "Get exported session data",
+          responses: {
+            200: {
+              description: "Exported session data",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      session: Session.Info,
+                      messages: z.array(Message.Info),
+                      exportedAt: z.number(),
+                    }),
+                  ),
+                },
+              },
+            },
+            404: {
+              description: "Exported session not found",
+              content: {
+                "application/json": {
+                  schema: resolver(z.object({ error: z.string() })),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "json",
+          z.object({
+            sessionID: z.string(),
+          }),
+        ),
+        async (c) => {
+          const body = c.req.valid("json")
+          const exportedData = await Session.getExported(body.sessionID)
+          if (!exportedData) {
+            return c.json({ error: "Exported session not found" }, 404)
+          }
+          return c.json(exportedData)
         },
       )
       .get(

@@ -74,6 +74,9 @@ resources:
       filePart: FilePart
       stepStartPart: StepStartPart
       messagePart: MessagePart
+      exportResult: ExportResult
+      exportedSession: ExportedSession
+      exportedSessionInfo: ExportedSessionInfo
     methods:
       list: get /session
       create: post /session
@@ -85,6 +88,9 @@ resources:
       summarize: post /session/{id}/summarize
       messages: get /session/{id}/message
       chat: post /session/{id}/message
+      export: post /session/{id}/export
+      listExported: get /session/export
+      getExported: post /session/{id}/exported
 
 settings:
   disable_mock_tests: true

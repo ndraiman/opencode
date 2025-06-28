@@ -25,7 +25,6 @@ import (
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
-	"github.com/sst/opencode/pkg/client"
 )
 
 // InterruptDebounceTimeoutMsg is sent when the interrupt key debounce timeout expires
@@ -519,15 +518,16 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 			slog.Error("Failed to share session", "error", err)
 			return a, toast.NewErrorToast("Failed to share session")
 		}
+
 	case commands.SessionExportCommand:
-		if a.app.Session.Id == "" {
+		if a.app.Session.ID == "" {
 			return a, nil
 		}
-		response, err := a.app.Client.PostSessionExportWithResponse(
+
+		// TODO: Need to regenerate client SDK to support this
+		response, err := a.app.Client.Session.Export(
 			context.Background(),
-			client.PostSessionExportJSONRequestBody{
-				SessionID: a.app.Session.Id,
-			},
+			a.app.Session.ID,
 		)
 		if err != nil {
 			slog.Error("Failed to export session locally", "error", err)
