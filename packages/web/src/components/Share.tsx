@@ -626,11 +626,6 @@ export default function Share(props: {
     messages: Record<string, Message.Info>
   }>({ info: props.info, messages: props.messages })
 
-  // Update store when props change (for local sessions)
-  createEffect(() => {
-    setStore("messages", reconcile(props.messages))
-  })
-
   const messages = createMemo(() =>
     Object.values(store.messages).toSorted((a, b) => a.id?.localeCompare(b.id)),
   )
