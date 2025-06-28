@@ -2,6 +2,7 @@ import { Log } from "../util/log"
 import { Bus } from "../bus"
 import { describeRoute, generateSpecs, openAPISpecs } from "hono-openapi"
 import { Hono } from "hono"
+import { cors } from "hono/cors"
 import { streamSSE } from "hono/streaming"
 import { Session } from "../session"
 import { resolver, validator as zValidator } from "hono-openapi/zod"
@@ -67,6 +68,14 @@ export namespace Server {
           duration: Date.now() - start,
         })
       })
+      .use(
+        cors({
+          origin: ["http://localhost:4321", "http://127.0.0.1:4321"],
+          allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+          allowHeaders: ["Content-Type", "Authorization"],
+          credentials: true,
+        }),
+      )
       .get(
         "/doc",
         openAPISpecs(app, {
