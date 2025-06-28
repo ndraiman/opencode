@@ -463,8 +463,63 @@ export namespace Server {
         async (c) => {
           const sessionID = c.req.valid("param").id
           const body = c.req.valid("json")
-          const msg = await Session.chat({ ...body, sessionID })
-          return c.json(msg)
+          
+          // Check if client wants SSE streaming
+          const acceptHeader = c.req.header("Accept")
+          const isStreamingRequest = acceptHeader?.includes("text/event-stream")
+          
+          if (isStreamingRequest) {
+            // Return SSE stream
+            return streamSSE(c, async (stream) => {
+              let assistantMessage: any = null
+              let lastTextLength = 0
+              
+              // Subscribe to message updates to stream them
+              const unsubscribe = Bus.subscribe(Message.Event.Updated, async (event) => {
+                if (event.properties.info.metadata.sessionID === sessionID && 
+                    event.properties.info.role === "assistant" &&
+                    (!assistantMessage || event.properties.info.id === assistantMessage.id)) {
+                  assistantMessage = event.properties.info
+                  
+                  // Find the text part to stream
+                  const textPart = event.properties.info.parts.find((part) => part.type === "text")
+                  if (textPart && textPart.type === "text" && textPart.text.length > lastTextLength) {
+                    // Only send the new text delta, not the full text
+                    const newText = textPart.text.slice(lastTextLength)
+                    lastTextLength = textPart.text.length
+                    
+                    await stream.writeSSE({
+                      data: JSON.stringify({
+                        type: "delta",
+                        content: newText,
+                        messageId: event.properties.info.id,
+                        fullText: textPart.text
+                      })
+                    })
+                  }
+                }
+              })
+              
+              try {
+                // Start the chat
+                const msg = await Session.chat({ ...body, sessionID })
+                
+                // Send completion event
+                await stream.writeSSE({
+                  data: JSON.stringify({
+                    type: "complete",
+                    message: msg
+                  })
+                })
+              } finally {
+                unsubscribe()
+              }
+            })
+          } else {
+            // Regular JSON response for non-streaming clients
+            const msg = await Session.chat({ ...body, sessionID })
+            return c.json(msg)
+          }
         },
       )
       .post(

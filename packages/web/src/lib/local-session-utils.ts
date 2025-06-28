@@ -102,7 +102,25 @@ export async function sendMessageToSession(
   message: string,
   providerID: string,
   modelID: string,
+  onDelta?: (delta: string, fullText: string) => void,
+  onComplete?: (message: any) => void,
+  onError?: (error: Error) => void,
 ) {
+  // Use streaming for web UI
+  if (onDelta) {
+    return sendMessageToSessionStream(
+      localApiUrl,
+      sessionId,
+      message,
+      providerID,
+      modelID,
+      onDelta,
+      onComplete,
+      onError
+    )
+  }
+
+  // Fallback to non-streaming for backward compatibility
   const response = await fetch(`${localApiUrl}/session/${sessionId}/message`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -123,4 +141,81 @@ export async function sendMessageToSession(
   }
 
   return await response.json()
+}
+
+export async function sendMessageToSessionStream(
+  localApiUrl: string,
+  sessionId: string,
+  message: string,
+  providerID: string,
+  modelID: string,
+  onDelta: (delta: string, fullText: string) => void,
+  onComplete?: (message: any) => void,
+  onError?: (error: Error) => void,
+) {
+  const requestBody = JSON.stringify({
+    providerID,
+    modelID,
+    parts: [
+      {
+        type: "text",
+        text: message,
+      },
+    ],
+  })
+
+  try {
+    const response = await fetch(`${localApiUrl}/session/${sessionId}/message`, {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        "Accept": "text/event-stream"
+      },
+      body: requestBody,
+    })
+
+    if (!response.ok) {
+      throw new Error(`Failed to send message: ${response.status}`)
+    }
+
+    const reader = response.body?.getReader()
+    if (!reader) {
+      throw new Error("No response body reader")
+    }
+
+    const decoder = new TextDecoder()
+    let buffer = ""
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      
+      // Process complete SSE messages
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || "" // Keep incomplete line in buffer
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6))
+            
+            if (data.type === "delta") {
+              onDelta(data.content, data.fullText)
+            } else if (data.type === "complete") {
+              onComplete?.(data.message)
+              return data.message
+            }
+          } catch (e) {
+            console.error("Failed to parse SSE data:", e)
+          }
+        }
+      }
+    }
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error))
+    onError?.(err)
+    throw err
+  }
 }
