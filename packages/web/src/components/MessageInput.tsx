@@ -82,33 +82,87 @@ export default function MessageInput(props: MessageInputProps) {
 
   const [selectedModel, setSelectedModel] = createSignal(getDefaultModel())
 
-  // Available models from providers data
-  const availableModels = createMemo(() => {
-    console.log("[MessageInput] Computing available models...")
+  // Available models grouped by provider
+  const availableModelsByProvider = createMemo(() => {
+    console.log("[MessageInput] Computing available models by provider...")
     if (!props.providersData?.providers) {
       console.log("[MessageInput] No providers data available")
       return []
     }
 
-    const models: Array<{
-      providerID: string
-      modelID: string
-      displayName: string
+    const providers: Array<{
+      providerName: string
+      providerId: string
+      models: Array<{
+        providerID: string
+        modelID: string
+        displayName: string
+      }>
     }> = []
 
     props.providersData.providers.forEach((provider) => {
+      const models: Array<{
+        providerID: string
+        modelID: string
+        displayName: string
+      }> = []
+
       Object.entries(provider.models).forEach(([modelId, model]) => {
-        const modelInfo = {
+        models.push({
           providerID: provider.id,
           modelID: modelId,
-          displayName: `${provider.name} / ${model.name}`,
-        }
-        models.push(modelInfo)
+          displayName: model.name,
+        })
+      })
+
+      if (models.length > 0) {
+        providers.push({
+          providerName: provider.name,
+          providerId: provider.id,
+          models,
+        })
+      }
+    })
+
+    console.log("[MessageInput] Grouped providers:", providers)
+    return providers
+  })
+
+  // Flat list for validation purposes
+  const availableModels = createMemo(() => {
+    const flat: Array<{
+      providerID: string
+      modelID: string
+      displayName: string
+      fullDisplayName: string
+    }> = []
+
+    availableModelsByProvider().forEach(provider => {
+      provider.models.forEach(model => {
+        flat.push({
+          ...model,
+          fullDisplayName: `${provider.providerName} / ${model.displayName}`
+        })
       })
     })
 
-    return models
+    return flat
   })
+
+  // Get display name for selected model
+  const getSelectedModelDisplayName = () => {
+    const current = validSelectedModel()
+    const model = availableModels().find(m => 
+      m.providerID === current.providerID && m.modelID === current.modelID
+    )
+    
+    if (model) {
+      return model.fullDisplayName
+    }
+    
+    // Fallback for when model isn't in available list
+    return `${current.providerID}/${current.modelID}`
+  }
 
   // Update selected model when providers data changes or ensure it's valid
   const validSelectedModel = createMemo(() => {
@@ -218,27 +272,36 @@ export default function MessageInput(props: MessageInputProps) {
               when={availableModels().length > 0}
               fallback={
                 <span class="model-fallback">
-                  {selectedModel().providerID}/{selectedModel().modelID}
+                  {getSelectedModelDisplayName()}
                 </span>
               }
             >
-              <select
-                value={`${validSelectedModel().providerID}|||${validSelectedModel().modelID}`}
-                onChange={(e) => {
-                  const [providerID, modelID] =
-                    e.currentTarget.value.split("|||")
-                  setSelectedModel({ providerID, modelID })
-                }}
-                disabled={isSending()}
-                class="model-select"
-                data-disabled={isSending()}
-              >
-                {availableModels().map((model) => (
-                  <option value={`${model.providerID}|||${model.modelID}`}>
-                    {model.displayName}
-                  </option>
-                ))}
-              </select>
+              <div class="model-selector-wrapper">
+                <select
+                  value={`${validSelectedModel().providerID}|||${validSelectedModel().modelID}`}
+                  onChange={(e) => {
+                    const [providerID, modelID] =
+                      e.currentTarget.value.split("|||")
+                    setSelectedModel({ providerID, modelID })
+                  }}
+                  disabled={isSending()}
+                  class="model-select"
+                  data-disabled={isSending()}
+                >
+                  {availableModelsByProvider().map((provider) => (
+                    <optgroup label={provider.providerName}>
+                      {provider.models.map((model) => (
+                        <option value={`${model.providerID}|||${model.modelID}`}>
+                          {model.displayName}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+                <span class="model-selected-display">
+                  {getSelectedModelDisplayName()}
+                </span>
+              </div>
             </Show>
           </div>
 
@@ -356,10 +419,31 @@ export default function MessageInput(props: MessageInputProps) {
           color: var(--sl-color-text-secondary);
         }
 
+        .model-selector-wrapper {
+          position: relative;
+          display: inline-block;
+        }
+
+        .model-selected-display {
+          position: absolute;
+          left: 0.75rem;
+          top: 50%;
+          transform: translateY(-50%);
+          font-size: 0.75rem;
+          color: var(--sl-color-text);
+          font-weight: 400;
+          white-space: nowrap;
+          pointer-events: none;
+          z-index: 1;
+          max-width: calc(100% - 2.5rem);
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
         .model-select {
           padding: 0.375rem 0.75rem;
           background-color: var(--sl-color-bg-surface);
-          color: var(--sl-color-text);
+          color: transparent;
           border: 1px solid var(--sl-color-divider);
           border-radius: 0.375rem;
           font-size: 0.75rem;
@@ -372,11 +456,34 @@ export default function MessageInput(props: MessageInputProps) {
           min-width: 220px;
           width: auto;
           appearance: none;
-          background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L2 4h8z'/%3E%3C/svg%3E");
+          background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23ccc' d='M6 4L2 8h8z'/%3E%3C/svg%3E");
           background-repeat: no-repeat;
           background-position: right 0.5rem center;
           background-size: 12px;
           padding-right: 2rem;
+        }
+
+
+        .model-select optgroup {
+          font-weight: 600;
+          font-size: 0.7rem;
+          color: var(--sl-color-text-secondary);
+          background-color: var(--sl-color-bg-nav);
+          padding: 0.25rem 0;
+          text-transform: uppercase;
+          letter-spacing: 0.025em;
+        }
+
+        .model-select option {
+          font-weight: 400;
+          font-size: 0.75rem;
+          color: var(--sl-color-text) !important;
+          background-color: var(--sl-color-bg-surface);
+          padding: 0.25rem 0.5rem;
+        }
+
+        .model-select option:hover {
+          background-color: var(--sl-color-bg-nav);
         }
 
         .model-select:hover:not([data-disabled="true"]) {
