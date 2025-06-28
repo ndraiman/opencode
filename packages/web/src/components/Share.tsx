@@ -625,6 +625,12 @@ export default function Share(props: {
     info?: Session.Info
     messages: Record<string, Message.Info>
   }>({ info: props.info, messages: props.messages })
+
+  // Update store when props change (for local sessions)
+  createEffect(() => {
+    setStore("messages", reconcile(props.messages))
+  })
+
   const messages = createMemo(() =>
     Object.values(store.messages).toSorted((a, b) => a.id?.localeCompare(b.id)),
   )
@@ -729,6 +735,8 @@ export default function Share(props: {
     const currentScrollY = window.scrollY
     const isScrollingDown = currentScrollY > lastScrollY
     const scrolled = currentScrollY > 200 // Show after scrolling 200px
+    const isNearBottom =
+      window.innerHeight + currentScrollY >= document.body.scrollHeight - 100
 
     // Only show when scrolling down, scrolled enough, and not near bottom
     const shouldShow = isScrollingDown && scrolled && !isNearBottom()
@@ -961,9 +969,9 @@ export default function Share(props: {
                           const hash = window.location.hash.slice(1)
                           // Wait till all parts are loaded
                           if (
-                            hash !== ""
-                            && msg.parts.length === partIndex() + 1
-                            && data().messages.length === msgIndex() + 1
+                            hash !== "" &&
+                            msg.parts.length === partIndex() + 1 &&
+                            data().messages.length === msgIndex() + 1
                           ) {
                             scrollToAnchor(hash)
                           }
@@ -1286,9 +1294,9 @@ export default function Share(props: {
                                 const path = createMemo(() =>
                                   toolData()?.args?.path !== data().rootDir
                                     ? stripWorkingDirectory(
-                                      toolData()?.args?.path,
-                                      data().rootDir,
-                                    )
+                                        toolData()?.args?.path,
+                                        data().rootDir,
+                                      )
                                     : toolData()?.args?.path,
                                 )
 

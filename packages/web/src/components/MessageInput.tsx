@@ -8,6 +8,7 @@ interface MessageInputProps {
   models: Record<string, string[]>
   onMessageSent?: () => void
   onMessageComplete?: (message: Message.Info) => void
+  onStreamingUpdate?: (assistantMessageId: string, text: string) => void
 }
 
 export default function MessageInput(props: MessageInputProps) {
@@ -15,8 +16,6 @@ export default function MessageInput(props: MessageInputProps) {
   const [isSending, setIsSending] = createSignal(false)
   const [error, setError] = createSignal<string | null>(null)
   const [success, setSuccess] = createSignal(false)
-  const [streamingResponse, setStreamingResponse] = createSignal("")
-  const [isStreaming, setIsStreaming] = createSignal(false)
 
   // Get the first available model from the session
   const getDefaultModel = () => {
@@ -35,10 +34,8 @@ export default function MessageInput(props: MessageInputProps) {
     if (!messageText || isSending()) return
 
     setIsSending(true)
-    setIsStreaming(true)
     setError(null)
     setSuccess(false)
-    setStreamingResponse("")
 
     try {
       const { providerID, modelID } = getDefaultModel()
@@ -49,34 +46,28 @@ export default function MessageInput(props: MessageInputProps) {
         messageText,
         providerID,
         modelID,
-        // onDelta: Show streaming response in real-time
-        (delta: string, fullText: string) => {
-          setStreamingResponse(fullText)
+        // onDelta: Just update the assistant message the server gives us
+        (delta: string, fullText: string, messageId?: string) => {
+          if (messageId) {
+            props.onStreamingUpdate?.(messageId, fullText)
+          }
         },
-        // onComplete: Use the real server message and notify parent
+        // onComplete: Server provides the completed messages
         (completedMessage: Message.Info) => {
-          setStreamingResponse("")
-          setIsStreaming(false)
           setMessage("")
           setSuccess(true)
           setTimeout(() => setSuccess(false), 3000)
 
-          // Add the complete server message to the store
           props.onMessageComplete?.(completedMessage)
-          // Also trigger a full refresh for consistency
           props.onMessageSent?.()
         },
-        // onError: Handle streaming errors
+        // onError: Handle errors
         (error: Error) => {
           setError(error.message)
-          setStreamingResponse("")
-          setIsStreaming(false)
         },
       )
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send message")
-      setStreamingResponse("")
-      setIsStreaming(false)
     } finally {
       setIsSending(false)
     }
@@ -119,20 +110,6 @@ export default function MessageInput(props: MessageInputProps) {
           </button>
         </div>
       </form>
-
-      <Show when={isStreaming() && streamingResponse()}>
-        <div class="message-input-streaming">
-          <div class="message-input-streaming-header">
-            <span data-color="blue" data-marker="label" data-separator>
-              Streaming
-            </span>
-            <span>AI is responding...</span>
-          </div>
-          <div class="message-input-streaming-content">
-            {streamingResponse()}
-          </div>
-        </div>
-      </Show>
 
       <Show when={error()}>
         <div class="message-input-error">
@@ -261,7 +238,6 @@ export default function MessageInput(props: MessageInputProps) {
           cursor: not-allowed;
         }
 
-        .message-input-streaming,
         .message-input-error,
         .message-input-success {
           margin-top: 0.5rem;
@@ -269,29 +245,6 @@ export default function MessageInput(props: MessageInputProps) {
           border-radius: 0.375rem;
           font-size: 0.75rem;
           line-height: 1.5;
-        }
-
-        .message-input-streaming {
-          background-color: var(--sl-color-bg-surface);
-          border: 1px solid var(--sl-color-blue-low);
-        }
-
-        .message-input-streaming-header {
-          display: flex;
-          align-items: center;
-          gap: 0.375rem;
-          margin-bottom: 0.5rem;
-          font-weight: 500;
-        }
-
-        .message-input-streaming-content {
-          white-space: pre-wrap;
-          font-family: inherit;
-          color: var(--sl-color-text);
-          border-top: 1px solid var(--sl-color-blue-low);
-          padding-top: 0.5rem;
-          max-height: 300px;
-          overflow-y: auto;
         }
 
         .message-input-error {
@@ -306,10 +259,6 @@ export default function MessageInput(props: MessageInputProps) {
 
         .message-input-error span[data-color="red"] {
           color: var(--sl-color-red);
-        }
-
-        .message-input-streaming span[data-color="blue"] {
-          color: var(--sl-color-blue);
         }
 
         .message-input-success span[data-color="green"] {
