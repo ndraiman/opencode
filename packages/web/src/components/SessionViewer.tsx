@@ -22,7 +22,7 @@ export default function SessionViewer(props: SessionViewerProps) {
   let shareRef: HTMLDivElement | undefined
   let resizeObserver: ResizeObserver | undefined
 
-  // Auto-scroll function
+  // Auto-scroll function - only if user is near bottom
   const scrollToBottom = () => {
     requestAnimationFrame(() => {
       const docElement = document.documentElement
@@ -34,10 +34,19 @@ export default function SessionViewer(props: SessionViewerProps) {
         docElement.offsetHeight,
       )
 
-      docElement.scrollTo({
-        top: scrollHeight,
-        behavior: "smooth",
-      })
+      const currentScrollTop = docElement.scrollTop
+      const windowHeight = window.innerHeight
+      const distanceFromBottom =
+        scrollHeight - (currentScrollTop + windowHeight)
+
+      // Only auto-scroll if user is within 100px of the bottom
+      // This allows them to scroll up and read without interference
+      if (distanceFromBottom <= 100) {
+        docElement.scrollTo({
+          top: scrollHeight,
+          behavior: "smooth",
+        })
+      }
     })
   }
 
