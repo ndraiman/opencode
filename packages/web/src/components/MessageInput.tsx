@@ -5,6 +5,7 @@ interface MessageInputProps {
   sessionId: string
   apiUrl: string
   models: Record<string, string[]>
+  onMessageSent?: () => void
 }
 
 export default function MessageInput(props: MessageInputProps) {
@@ -56,6 +57,8 @@ export default function MessageInput(props: MessageInputProps) {
           setMessage("")
           setSuccess(true)
           setTimeout(() => setSuccess(false), 3000)
+          // Notify parent component that message was sent
+          props.onMessageSent?.()
         },
         // onError: Handle streaming errors
         (error: Error) => {
