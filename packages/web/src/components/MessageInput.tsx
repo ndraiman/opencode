@@ -1,11 +1,13 @@
 import { createSignal, Show } from "solid-js"
 import { sendMessageToSession } from "../lib/local-session-utils"
+import type { Message } from "opencode/session/message"
 
 interface MessageInputProps {
   sessionId: string
   apiUrl: string
   models: Record<string, string[]>
   onMessageSent?: () => void
+  onMessageComplete?: (message: Message.Info) => void
 }
 
 export default function MessageInput(props: MessageInputProps) {
@@ -40,6 +42,7 @@ export default function MessageInput(props: MessageInputProps) {
 
     try {
       const { providerID, modelID } = getDefaultModel()
+
       await sendMessageToSession(
         props.apiUrl,
         props.sessionId,
@@ -50,14 +53,17 @@ export default function MessageInput(props: MessageInputProps) {
         (delta: string, fullText: string) => {
           setStreamingResponse(fullText)
         },
-        // onComplete: Clear streaming display and show success
-        (completedMessage: any) => {
+        // onComplete: Use the real server message and notify parent
+        (completedMessage: Message.Info) => {
           setStreamingResponse("")
           setIsStreaming(false)
           setMessage("")
           setSuccess(true)
           setTimeout(() => setSuccess(false), 3000)
-          // Notify parent component that message was sent
+
+          // Add the complete server message to the store
+          props.onMessageComplete?.(completedMessage)
+          // Also trigger a full refresh for consistency
           props.onMessageSent?.()
         },
         // onError: Handle streaming errors
@@ -65,7 +71,7 @@ export default function MessageInput(props: MessageInputProps) {
           setError(error.message)
           setStreamingResponse("")
           setIsStreaming(false)
-        }
+        },
       )
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send message")
@@ -148,7 +154,7 @@ export default function MessageInput(props: MessageInputProps) {
         </div>
       </Show>
 
-      <style jsx>{`
+      <style>{`
         .message-input-container {
           display: flex;
           flex-direction: column;

@@ -15,13 +15,18 @@ interface SessionViewerProps {
 }
 
 export default function SessionViewer(props: SessionViewerProps) {
-  const [messagesStore, setMessagesStore] = createStore<Record<string, Message.Info>>(props.initialMessages)
+  const [messagesStore, setMessagesStore] = createStore<
+    Record<string, Message.Info>
+  >(props.initialMessages)
   const [refreshTrigger, setRefreshTrigger] = createSignal(0)
 
   // Function to refresh messages from server
   const refreshMessages = async () => {
     try {
-      const newMessages = await fetchSessionMessages(props.apiUrl, props.sessionId)
+      const newMessages = await fetchSessionMessages(
+        props.apiUrl,
+        props.sessionId,
+      )
       const messagesObj: Record<string, Message.Info> = {}
       newMessages.forEach((msg: any) => {
         messagesObj[msg.id] = msg
@@ -41,7 +46,14 @@ export default function SessionViewer(props: SessionViewerProps) {
 
   const handleMessageSent = () => {
     // Trigger a refresh by incrementing the signal
-    setRefreshTrigger(prev => prev + 1)
+    setRefreshTrigger((prev) => prev + 1)
+  }
+
+  const handleMessageComplete = (message: Message.Info) => {
+    // Add the complete message from server immediately
+    if (message && message.id) {
+      setMessagesStore(message.id, message)
+    }
   }
 
   return (
@@ -57,6 +69,7 @@ export default function SessionViewer(props: SessionViewerProps) {
         apiUrl={props.apiUrl}
         models={props.models}
         onMessageSent={handleMessageSent}
+        onMessageComplete={handleMessageComplete}
       />
     </div>
   )
