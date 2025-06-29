@@ -66,16 +66,95 @@ const helpText = `
     ],
   }}
 >
-  <SessionsList
-    sessions={sessions}
-    title="Project Sessions"
-    emptyMessage="No active project sessions found. Start opencode to create sessions."
-    helpText={helpText}
-    error={error}
-    apiUrl={localApiUrl}
-    basePath="/project"
-    client:only="solid"
-  />
+  <div class="project-sessions-container">
+    <div class="sessions-header">
+      <h1>Project Sessions</h1>
+      <a href="/project/create-session" class="create-session-btn">
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+        Create New Session
+      </a>
+    </div>
+    <SessionsList
+      sessions={sessions}
+      title=""
+      emptyMessage="No active project sessions found. Start opencode to create sessions."
+      helpText={helpText}
+      error={error}
+      apiUrl={localApiUrl}
+      basePath="/project"
+      client:only="solid"
+    />
+  </div>
 </StarlightPage>
 
+<style>
+  .project-sessions-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
 
+  .sessions-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    gap: 1rem;
+  }
+
+  .sessions-header h1 {
+    color: var(--sl-color-white);
+    margin: 0;
+    font-size: 2.5rem;
+    font-weight: 600;
+  }
+
+  .create-session-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background: var(--sl-color-accent);
+    color: var(--sl-color-white);
+    text-decoration: none;
+    border-radius: 6px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+  }
+
+  .create-session-btn:hover {
+    background: var(--sl-color-accent-high);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  }
+
+  .create-session-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  @media (max-width: 600px) {
+    .sessions-header {
+      flex-direction: column;
+      align-items: stretch;
+      text-align: center;
+    }
+
+    .sessions-header h1 {
+      font-size: 2rem;
+    }
+  }
+</style>
