@@ -1,28 +1,23 @@
 import { onCleanup, createSignal, onMount } from "solid-js"
-import { createStore, reconcile } from "solid-js/store"
+import { createStore } from "solid-js/store"
 import Share from "./Share"
 import MessageInput from "./MessageInput"
 import {
-  fetchSessionMessages,
   fetchProviders,
   type ProvidersResponse,
 } from "../lib/local-session-utils"
-import { sendMessage } from "../lib/messaging"
+import { createSessionAndSendMessage } from "../lib/messaging"
 import type { Message } from "opencode/session/message"
-import type { Session } from "opencode/session/index"
 
-interface SessionViewerProps {
-  sessionId: string
+interface CreateSessionProps {
   apiUrl: string
-  sessionInfo: Session.Info
-  initialMessages: Record<string, Message.Info>
   models: Record<string, string[]>
 }
 
-export default function SessionViewer(props: SessionViewerProps) {
+export default function CreateSession(props: CreateSessionProps) {
   const [messagesStore, setMessagesStore] = createStore<
     Record<string, Message.Info>
-  >(props.initialMessages)
+  >({})
 
   const [providersData, setProvidersData] =
     createSignal<ProvidersResponse | null>(null)
@@ -36,13 +31,26 @@ export default function SessionViewer(props: SessionViewerProps) {
   let shareRef: HTMLDivElement | undefined
   let resizeObserver: ResizeObserver | undefined
 
+  // Create a mock session info for display
+  const mockSessionInfo = {
+    id: "create-session",
+    title: "New Session",
+    time: {
+      created: Date.now(),
+      updated: Date.now(),
+    },
+    path: {
+      root: typeof window !== "undefined" ? window.location.pathname : "",
+    },
+  }
+
   // Fetch providers data on mount
   onMount(async () => {
     try {
       const providers = await fetchProviders(props.apiUrl)
       setProvidersData(providers)
     } catch (error) {
-      console.error("[SessionViewer] Failed to fetch providers:", error)
+      console.error("[CreateSession] Failed to fetch providers:", error)
       setProvidersError(
         error instanceof Error ? error.message : "Failed to fetch providers",
       )
@@ -67,7 +75,6 @@ export default function SessionViewer(props: SessionViewerProps) {
         scrollHeight - (currentScrollTop + windowHeight)
 
       // Only auto-scroll if user is within 100px of the bottom
-      // This allows them to scroll up and read without interference
       if (distanceFromBottom <= 100) {
         docElement.scrollTo({
           top: scrollHeight,
@@ -100,23 +107,6 @@ export default function SessionViewer(props: SessionViewerProps) {
     stopScrollObserver()
   })
 
-  // Function to refresh messages from server
-  const refreshMessages = async () => {
-    try {
-      const newMessages = await fetchSessionMessages(
-        props.apiUrl,
-        props.sessionId,
-      )
-      const messagesObj: Record<string, Message.Info> = {}
-      newMessages.forEach((msg: any) => {
-        messagesObj[msg.id] = msg
-      })
-      setMessagesStore(reconcile(messagesObj))
-    } catch (error) {
-      console.error("Failed to refresh messages:", error)
-    }
-  }
-
   const handleMessageSubmit = async (
     message: string,
     providerID: string,
@@ -126,16 +116,18 @@ export default function SessionViewer(props: SessionViewerProps) {
     setSendError(null)
     setSendSuccess(false)
 
-    await sendMessage({
+    await createSessionAndSendMessage({
       apiUrl: props.apiUrl,
-      sessionId: props.sessionId,
       message,
       providerID,
       modelID,
       callbacks: {
+        onSessionCreated: (sessionId: string) => {
+          // Update the URL without page reload to prevent flickering
+          window.history.replaceState(null, "", `/project/${sessionId}`)
+        },
         onMessageSent: () => {
-          // Refresh messages when sent
-          refreshMessages()
+          // Message sent, no refresh needed since messages are streamed
         },
         onStreamingUpdate: (assistantMessageId: string, text: string) => {
           // Start observing when streaming begins
@@ -156,7 +148,7 @@ export default function SessionViewer(props: SessionViewerProps) {
                 role: "assistant",
                 parts: [{ type: "text", text }],
                 metadata: {
-                  sessionID: props.sessionId,
+                  sessionID: assistantMessageId, // Will have the real session ID from server
                   time: { created: Date.now() },
                   tool: {},
                 },
@@ -189,9 +181,9 @@ export default function SessionViewer(props: SessionViewerProps) {
     <div>
       <div ref={shareRef}>
         <Share
-          id={props.sessionId}
+          id="create-session"
           api={props.apiUrl}
-          info={props.sessionInfo}
+          info={mockSessionInfo}
           messages={messagesStore}
         />
       </div>

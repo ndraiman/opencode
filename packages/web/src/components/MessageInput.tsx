@@ -1,27 +1,20 @@
 import { createSignal, Show, createMemo } from "solid-js"
-import {
-  sendMessageToSession,
-  type ProvidersResponse,
-} from "../lib/local-session-utils"
+import type { ProvidersResponse } from "../lib/local-session-utils"
 import type { Message } from "opencode/session/message"
 
 interface MessageInputProps {
-  sessionId: string
-  apiUrl: string
   models: Record<string, string[]>
   providersData: ProvidersResponse | null
   providersError: string | null
   messages: Record<string, Message.Info>
-  onMessageSent?: () => void
-  onMessageComplete?: (message: Message.Info) => void
-  onStreamingUpdate?: (assistantMessageId: string, text: string) => void
+  isSending?: boolean
+  error?: string | null
+  success?: boolean
+  onSubmit?: (message: string, providerID: string, modelID: string) => void
 }
 
 export default function MessageInput(props: MessageInputProps) {
   const [message, setMessage] = createSignal("")
-  const [isSending, setIsSending] = createSignal(false)
-  const [error, setError] = createSignal<string | null>(null)
-  const [success, setSuccess] = createSignal(false)
 
   // Get model from last message if available
   const getLastMessageModel = () => {
@@ -137,11 +130,11 @@ export default function MessageInput(props: MessageInputProps) {
       fullDisplayName: string
     }> = []
 
-    availableModelsByProvider().forEach(provider => {
-      provider.models.forEach(model => {
+    availableModelsByProvider().forEach((provider) => {
+      provider.models.forEach((model) => {
         flat.push({
           ...model,
-          fullDisplayName: `${provider.providerName} / ${model.displayName}`
+          fullDisplayName: `${provider.providerName} / ${model.displayName}`,
         })
       })
     })
@@ -152,14 +145,15 @@ export default function MessageInput(props: MessageInputProps) {
   // Get display name for selected model
   const getSelectedModelDisplayName = () => {
     const current = validSelectedModel()
-    const model = availableModels().find(m => 
-      m.providerID === current.providerID && m.modelID === current.modelID
+    const model = availableModels().find(
+      (m) =>
+        m.providerID === current.providerID && m.modelID === current.modelID,
     )
-    
+
     if (model) {
       return model.fullDisplayName
     }
-    
+
     // Fallback for when model isn't in available list
     return `${current.providerID}/${current.modelID}`
   }
@@ -198,53 +192,15 @@ export default function MessageInput(props: MessageInputProps) {
   const handleSubmit = async (e: Event) => {
     e.preventDefault()
     const messageText = message().trim()
-    if (!messageText || isSending()) return
+    if (!messageText || props.isSending) return
 
-    setIsSending(true)
-    setError(null)
-    setSuccess(false)
+    const { providerID, modelID } = validSelectedModel()
 
-    try {
-      const { providerID, modelID } = validSelectedModel()
+    // Clear the input immediately
+    setMessage("")
 
-      let hasRefreshedForUserMessage = false
-
-      await sendMessageToSession(
-        props.apiUrl,
-        props.sessionId,
-        messageText,
-        providerID,
-        modelID,
-        // onDelta: Update assistant message and refresh to get user message on first delta
-        (delta: string, fullText: string, messageId?: string) => {
-          if (messageId) {
-            // On first delta, refresh to get the user message the server created
-            if (!hasRefreshedForUserMessage) {
-              hasRefreshedForUserMessage = true
-              props.onMessageSent?.()
-            }
-            props.onStreamingUpdate?.(messageId, fullText)
-          }
-        },
-        // onComplete: Server provides the completed messages
-        (completedMessage: Message.Info) => {
-          setMessage("")
-          setSuccess(true)
-          setTimeout(() => setSuccess(false), 3000)
-
-          props.onMessageComplete?.(completedMessage)
-          props.onMessageSent?.()
-        },
-        // onError: Handle errors
-        (error: Error) => {
-          setError(error.message)
-        },
-      )
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send message")
-    } finally {
-      setIsSending(false)
-    }
+    // Emit the submit event to parent
+    props.onSubmit?.(messageText, providerID, modelID)
   }
 
   return (
@@ -259,9 +215,9 @@ export default function MessageInput(props: MessageInputProps) {
             value={message()}
             onInput={(e) => setMessage(e.currentTarget.value)}
             placeholder="Type your message here..."
-            disabled={isSending()}
+            disabled={props.isSending}
             class="message-input-textarea"
-            data-disabled={isSending()}
+            data-disabled={props.isSending}
           />
         </div>
 
@@ -284,14 +240,16 @@ export default function MessageInput(props: MessageInputProps) {
                       e.currentTarget.value.split("|||")
                     setSelectedModel({ providerID, modelID })
                   }}
-                  disabled={isSending()}
+                  disabled={props.isSending}
                   class="model-select"
-                  data-disabled={isSending()}
+                  data-disabled={props.isSending}
                 >
                   {availableModelsByProvider().map((provider) => (
                     <optgroup label={provider.providerName}>
                       {provider.models.map((model) => (
-                        <option value={`${model.providerID}|||${model.modelID}`}>
+                        <option
+                          value={`${model.providerID}|||${model.modelID}`}
+                        >
                           {model.displayName}
                         </option>
                       ))}
@@ -307,26 +265,26 @@ export default function MessageInput(props: MessageInputProps) {
 
           <button
             type="submit"
-            disabled={!message().trim() || isSending()}
+            disabled={!message().trim() || props.isSending}
             data-element-button-text
             class="message-input-submit"
-            data-disabled={!message().trim() || isSending()}
+            data-disabled={!message().trim() || props.isSending}
           >
-            {isSending() ? "Sending..." : "Send Message"}
+            {props.isSending ? "Sending..." : "Send Message"}
           </button>
         </div>
       </form>
 
-      <Show when={error()}>
+      <Show when={props.error}>
         <div class="message-input-error">
           <span data-color="red" data-marker="label" data-separator>
             Error
           </span>
-          <span>{error()}</span>
+          <span>{props.error}</span>
         </div>
       </Show>
 
-      <Show when={success()}>
+      <Show when={props.success}>
         <div class="message-input-success">
           <span data-color="green" data-marker="label" data-separator>
             Success

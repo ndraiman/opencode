@@ -190,6 +190,19 @@ export async function fetchProviders(localApiUrl: string): Promise<ProvidersResp
   return await response.json()
 }
 
+export async function createSession(localApiUrl: string): Promise<any> {
+  const response = await fetch(`${localApiUrl}/session`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  })
+
+  if (!response.ok) {
+    throw new Error("Failed to create session")
+  }
+
+  return await response.json()
+}
+
 export async function sendMessageToSessionStream(
   localApiUrl: string,
   sessionId: string,
