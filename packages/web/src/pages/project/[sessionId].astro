@@ -1,49 +1,99 @@
 ---
-import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
-import SessionViewer from "../../components/SessionViewer.tsx";
-import { fetchProjectSessions, fetchSessionMessages, computeSessionData } from "../../lib/local-session-utils";
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro"
+import SessionViewer from "../../components/SessionViewer.tsx"
+import {
+  fetchProjectSessions,
+  fetchSessionMessages,
+  fetchProviders,
+  computeSessionData,
+} from "../../lib/local-session-utils"
 
-const localApiUrl = import.meta.env.VITE_LOCAL_API_URL || "http://localhost:4096";
-const { sessionId } = Astro.params;
+const localApiUrl =
+  import.meta.env.VITE_LOCAL_API_URL || "http://localhost:4096"
+const { sessionId } = Astro.params
 
-let sessionInfo;
-let messages;
-let error = null;
+if (!sessionId) {
+  return new Response(null, {
+    status: 400,
+    statusText: "Session ID is required",
+  })
+}
+
+let sessionInfo
+let messages
+let models: Record<string, string[]> = {}
+let error = null
 
 try {
-  const [sessions, messagesList] = await Promise.all([
-    fetchProjectSessions(localApiUrl),
-    fetchSessionMessages(localApiUrl, sessionId)
-  ]);
+  if (sessionId === "new") {
+    // Handle new session case
+    const providersData = await fetchProviders(localApiUrl)
 
-  sessionInfo = sessions.find((s: any) => s.id === sessionId);
-  messages = messagesList;
+    // Create mock session info for new session
+    sessionInfo = {
+      id: "new",
+      title: "New Session",
+      time: {
+        created: Date.now(),
+        updated: Date.now(),
+      },
+      path: {
+        root:
+          typeof globalThis !== "undefined" && globalThis.location
+            ? globalThis.location.pathname
+            : "",
+      },
+    }
 
-  if (!sessionInfo) {
-    return new Response(null, {
-      status: 404,
-      statusText: 'Project session not found'
-    });
+    // Empty messages for new session
+    messages = []
+
+    // Create models object from providers data
+    if (providersData?.providers) {
+      providersData.providers.forEach((provider) => {
+        const modelIds = Object.keys(provider.models)
+        if (modelIds.length > 0) {
+          models[`${provider.id} ${modelIds[0]}`] = [provider.id, modelIds[0]]
+        }
+      })
+    }
+  } else {
+    // Handle existing session case
+    const [sessions, messagesList] = await Promise.all([
+      fetchProjectSessions(localApiUrl),
+      fetchSessionMessages(localApiUrl, sessionId),
+    ])
+
+    sessionInfo = sessions.find((s: any) => s.id === sessionId)
+    messages = messagesList
+
+    if (!sessionInfo) {
+      return new Response(null, {
+        status: 404,
+        statusText: "Project session not found",
+      })
+    }
+
+    const sessionData = computeSessionData(sessionInfo, messages)
+    models = sessionData.models
   }
 } catch (e) {
-  error = e.message;
+  error = e.message
 }
 
 if (error) {
   return new Response(null, {
     status: 500,
-    statusText: error
-  });
+    statusText: error,
+  })
 }
 
-const messagesObj = {};
+const messagesObj: Record<string, any> = {}
 messages.forEach((msg: any) => {
-  messagesObj[msg.id] = msg;
-});
-
-const sessionData = computeSessionData(sessionInfo, messages);
-
+  messagesObj[msg.id] = msg
+})
 ---
+
 <StarlightPage
   hasSidebar={false}
   frontmatter={{
@@ -67,20 +117,26 @@ const sessionData = computeSessionData(sessionInfo, messages);
     apiUrl={localApiUrl}
     sessionInfo={sessionInfo}
     initialMessages={messagesObj}
-    models={sessionData.models}
+    models={models}
     client:only="solid"
   />
 </StarlightPage>
 
 <style is:global>
-body > .page > .main-frame .main-pane > main > .content-panel:first-of-type {
-  display: none;
-}
-body > .page > .main-frame .main-pane > main {
-  padding: 0;
-}
-body > .page > .main-frame .main-pane > main > .content-panel + .content-panel {
-  border-top: none !important;
-  padding: 0;
-}
-</style> 
+  body > .page > .main-frame .main-pane > main > .content-panel:first-of-type {
+    display: none;
+  }
+  body > .page > .main-frame .main-pane > main {
+    padding: 0;
+  }
+  body
+    > .page
+    > .main-frame
+    .main-pane
+    > main
+    > .content-panel
+    + .content-panel {
+    border-top: none !important;
+    padding: 0;
+  }
+</style>
