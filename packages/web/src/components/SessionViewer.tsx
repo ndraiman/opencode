@@ -5,9 +5,11 @@ import MessageInput from "./MessageInput"
 import {
   fetchSessionMessages,
   fetchProviders,
+  createSession,
+  sendMessageToSession,
   type ProvidersResponse,
 } from "../lib/local-session-utils"
-import { sendMessage } from "../lib/messaging"
+import { watchSession } from "../lib/session-watcher"
 import type { Message } from "opencode/session/message"
 import type { Session } from "opencode/session/index"
 
@@ -33,10 +35,58 @@ export default function SessionViewer(props: SessionViewerProps) {
   const [sendError, setSendError] = createSignal<string | null>(null)
   const [sendSuccess, setSendSuccess] = createSignal(false)
 
+  // Session info that can be updated in real-time
+  const [sessionInfo, setSessionInfo] = createSignal<Session.Info>(
+    props.sessionInfo,
+  )
+
+  // Track the actual session ID (starts as props.sessionId, updates when new session is created)
+  const [actualSessionId, setActualSessionId] = createSignal(props.sessionId)
+
   let shareRef: HTMLDivElement | undefined
   let resizeObserver: ResizeObserver | undefined
+  let sessionWatcher: { disconnect: () => void } | undefined
 
-  // Fetch providers data on mount
+  // Helper function to start session watcher
+  const startSessionWatcher = (actualSessionId: string) => {
+    if (sessionWatcher) {
+      sessionWatcher.disconnect()
+    }
+
+    console.log(
+      "[SessionViewer] Starting session watcher for:",
+      actualSessionId,
+    )
+    sessionWatcher = watchSession(props.apiUrl, actualSessionId, {
+      onSessionUpdated: (updatedSession) => {
+        console.log(
+          "[SessionViewer] Session updated callback triggered:",
+          updatedSession,
+        )
+        console.log(
+          "[SessionViewer] Current title:",
+          sessionInfo().title,
+          "New title:",
+          updatedSession.title,
+        )
+        setSessionInfo(updatedSession)
+
+        // Update page title if it changed
+        if (updatedSession.title && document.title !== updatedSession.title) {
+          console.log(
+            "[SessionViewer] Updating page title to:",
+            updatedSession.title,
+          )
+          document.title = updatedSession.title
+        }
+      },
+      onError: (error) => {
+        console.error("[SessionViewer] Session watcher error:", error)
+      },
+    })
+  }
+
+  // Fetch providers data and start session watcher on mount
   onMount(async () => {
     try {
       const providers = await fetchProviders(props.apiUrl)
@@ -46,6 +96,11 @@ export default function SessionViewer(props: SessionViewerProps) {
       setProvidersError(
         error instanceof Error ? error.message : "Failed to fetch providers",
       )
+    }
+
+    // Start watching for session updates (only for existing sessions)
+    if (props.sessionId !== "new") {
+      startSessionWatcher(props.sessionId)
     }
   })
 
@@ -95,17 +150,21 @@ export default function SessionViewer(props: SessionViewerProps) {
     }
   }
 
-  // Cleanup observer on component unmount
+  // Cleanup observer and session watcher on component unmount
   onCleanup(() => {
     stopScrollObserver()
+    sessionWatcher?.disconnect()
   })
 
-  // Function to refresh messages from server
+  // Function to refresh messages from server (now uses actual session ID)
   const refreshMessages = async () => {
+    const currentSessionId = actualSessionId()
+    if (currentSessionId === "new") return // Don't try to refresh messages for "new" session
+
     try {
       const newMessages = await fetchSessionMessages(
         props.apiUrl,
-        props.sessionId,
+        currentSessionId,
       )
       const messagesObj: Record<string, Message.Info> = {}
       newMessages.forEach((msg: any) => {
@@ -126,61 +185,127 @@ export default function SessionViewer(props: SessionViewerProps) {
     setSendError(null)
     setSendSuccess(false)
 
-    await sendMessage({
-      apiUrl: props.apiUrl,
-      sessionId: props.sessionId,
-      message,
-      providerID,
-      modelID,
-      callbacks: {
-        onMessageSent: () => {
-          // Refresh messages when sent
-          refreshMessages()
-        },
-        onStreamingUpdate: (assistantMessageId: string, text: string) => {
-          // Start observing when streaming begins
-          startScrollObserver()
+    try {
+      let sessionId = actualSessionId()
+      let newSessionCreated = false
+      let newSessionInfo: Session.Info | null = null
 
-          // Create or update the assistant message during streaming
-          setMessagesStore(assistantMessageId, (prev) => {
-            if (prev) {
-              // Update existing message
-              return {
-                ...prev,
-                parts: [{ type: "text", text }],
-              }
-            } else {
-              // Create new message on first update
-              return {
-                id: assistantMessageId,
-                role: "assistant",
-                parts: [{ type: "text", text }],
-                metadata: {
-                  sessionID: props.sessionId,
-                  time: { created: Date.now() },
-                  tool: {},
-                },
-              }
+      // If this is a new session, create it first but don't update UI yet
+      if (sessionId === "new") {
+        newSessionInfo = await createSession(props.apiUrl)
+        sessionId = newSessionInfo!.id
+        newSessionCreated = true
+      }
+
+      let hasRefreshedForUserMessage = false
+      let hasInitialized = false
+
+      // Helper function to initialize new session UI (called only once)
+      const initializeNewSessionUI = () => {
+        if (newSessionCreated && !hasInitialized && newSessionInfo) {
+          hasInitialized = true
+
+          // Update the actual session ID
+          setActualSessionId(sessionId)
+
+          // Update the session info
+          setSessionInfo(newSessionInfo)
+
+          // Start watching the new session
+          startSessionWatcher(sessionId)
+
+          console.log(
+            "[SessionViewer] Session created and watcher started for:",
+            sessionId,
+          )
+          console.log("[SessionViewer] Session title:", newSessionInfo.title)
+        }
+      }
+
+      await sendMessageToSession(
+        props.apiUrl,
+        sessionId,
+        message,
+        providerID,
+        modelID,
+        // onDelta: Update assistant message and refresh to get user message on first delta
+        (delta: string, fullText: string, messageId?: string) => {
+          if (messageId) {
+            // On first delta, initialize new session UI if needed
+            initializeNewSessionUI()
+
+            // On first delta, refresh to get the user message the server created
+            if (!hasRefreshedForUserMessage) {
+              hasRefreshedForUserMessage = true
+              // Refresh messages when sent
+              refreshMessages()
             }
-          })
+
+            // Start observing when streaming begins
+            startScrollObserver()
+
+            // Create or update the assistant message during streaming
+            setMessagesStore(messageId, (prev) => {
+              if (prev) {
+                // Update existing message
+                return {
+                  ...prev,
+                  parts: [{ type: "text", text: fullText }],
+                }
+              } else {
+                // Create new message on first update
+                return {
+                  id: messageId,
+                  role: "assistant",
+                  parts: [{ type: "text", text: fullText }],
+                  metadata: {
+                    sessionID: sessionId,
+                    time: { created: Date.now() },
+                    tool: {},
+                  },
+                }
+              }
+            })
+          }
         },
-        onMessageComplete: (message: Message.Info) => {
+        // onComplete: Server provides the completed messages
+        (completedMessage: Message.Info) => {
+          // Initialize new session UI if not done yet (for non-streaming responses)
+          initializeNewSessionUI()
+
           // Stop observing when streaming ends
           stopScrollObserver()
 
           // Replace optimistic message with real server message
-          if (message && message.id) {
-            setMessagesStore(message.id, message)
+          if (completedMessage && completedMessage.id) {
+            setMessagesStore(completedMessage.id, completedMessage)
           }
 
           setSendSuccess(true)
           setTimeout(() => setSendSuccess(false), 3000)
+
+          // Refresh messages when complete
+          refreshMessages()
+
+          // Update URL after everything is complete (for new sessions)
+          if (newSessionCreated && typeof window !== "undefined") {
+            console.log(
+              "[SessionViewer] Message complete, updating URL to:",
+              `/project/${sessionId}`,
+            )
+            window.history.replaceState(null, "", `/project/${sessionId}`)
+          }
         },
-        onError: (error: string) => {
-          setSendError(error)
+        // onError: Handle errors
+        (error: Error) => {
+          setSendError(error.message)
         },
-      },
-    })
+      )
+    } catch (err) {
+      setSendError(
+        err instanceof Error ? err.message : "Failed to send message",
+      )
+    }
 
     setIsSending(false)
   }
@@ -189,9 +314,9 @@ export default function SessionViewer(props: SessionViewerProps) {
     <div>
       <div ref={shareRef}>
         <Share
-          id={props.sessionId}
+          id={actualSessionId()} // Use actual session ID instead of props.sessionId
           api={props.apiUrl}
-          info={props.sessionInfo}
+          info={sessionInfo()}
           messages={messagesStore}
         />
       </div>
