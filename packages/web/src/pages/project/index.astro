@@ -1,39 +1,39 @@
 ---
-import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
-import SessionsList from "../../components/SessionsList.tsx";
-import { fetchProjectSessions, computeSessionData } from "../../lib/local-session-utils";
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro"
+import SessionsList from "../../components/SessionsList.tsx"
+import {
+  fetchProjectSessions,
+  computeSessionData,
+  fetchSessionMessages,
+} from "../../lib/local-session-utils"
 
-const localApiUrl = import.meta.env.VITE_LOCAL_API_URL || "http://localhost:4096";
+const localApiUrl =
+  import.meta.env.VITE_LOCAL_API_URL || "http://localhost:4096"
 
-let sessions = [];
-let error = null;
+let sessions = []
+let error = null
 
 try {
-  const sessionList = await fetchProjectSessions(localApiUrl);
-  
-  const sessionsWithData = sessionList.map((session: any) => {
-    // For project sessions, we don't have full message data, so we use session info
-    const computedData = {
-      rootDir: session.path?.root,
-      created: session.time.created,
-      completed: session.time.completed,
-      models: {},
-      cost: 0,
-      tokens: {
-        input: 0,
-        output: 0,
-        reasoning: 0,
-      },
-    };
-    return { 
-      ...session, 
-      computedData
-    };
-  });
-  
-  sessions = sessionsWithData.sort((a: any, b: any) => b.time.updated - a.time.updated);
+  const sessionList = await fetchProjectSessions(localApiUrl)
+
+  const sessionsWithData = await Promise.all(
+    sessionList.map(async (session: any) => {
+      // Fetch messages for each session to compute real token data
+      const messages = await fetchSessionMessages(localApiUrl, session.id)
+      const computedData = computeSessionData(session, messages)
+
+      return {
+        ...session,
+        computedData,
+      }
+    })
+  )
+
+  sessions = sessionsWithData.sort(
+    (a: any, b: any) => b.time.updated - a.time.updated
+  )
 } catch (e) {
-  error = e.message;
+  error = e.message
 }
 
 const helpText = `
@@ -44,9 +44,9 @@ const helpText = `
   <li>Use <code>/export</code> command to move sessions to permanent local storage</li>
 </ol>
 <p><strong>Note:</strong> These are active project sessions that may be cleaned up over time.</p>
-`;
-
+`
 ---
+
 <StarlightPage
   hasSidebar={false}
   frontmatter={{
@@ -78,120 +78,127 @@ const helpText = `
 </StarlightPage>
 
 <style is:global>
-body > .page > .main-frame .main-pane > main > .content-panel:first-of-type {
-  display: none;
-}
-body > .page > .main-frame .main-pane > main {
-  padding: 0;
-}
-body > .page > .main-frame .main-pane > main > .content-panel + .content-panel {
-  border-top: none !important;
-  padding: 0;
-}
-
-.local-sessions {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 2rem;
-}
-
-.local-sessions h1 {
-  color: var(--sl-color-white);
-  margin-bottom: 2rem;
-}
-
-.error-message {
-  background: var(--sl-color-red-low);
-  border: 1px solid var(--sl-color-red);
-  color: var(--sl-color-red-high);
-  padding: 1rem;
-  border-radius: 8px;
-  margin: 1rem 0;
-}
-
-.error-message p {
-  margin-top: 0.5rem;
-  font-size: 0.9em;
-  opacity: 0.8;
-}
-
-.empty-state {
-  color: var(--sl-color-gray-3);
-  text-align: center;
-  padding: 2rem;
-  font-style: italic;
-}
-
-.sessions-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2.5rem;
-}
-
-.session-item {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  padding: 1.5rem;
-  background: var(--sl-color-gray-6);
-  border: 1px solid var(--sl-color-gray-5);
-  border-radius: 8px;
-  transition: all 0.2s ease;
-}
-
-.session-item:hover {
-  background: var(--sl-color-gray-5);
-  border-color: var(--sl-color-accent);
-}
-
-.session-title h3 {
-  font-size: 2rem;
-  font-weight: 500;
-  line-height: 1.2;
-  letter-spacing: -0.05em;
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-@media (max-width: 30rem) {
-  .session-title h3 {
-    font-size: 1.75rem;
-    line-height: 1.25;
+  body > .page > .main-frame .main-pane > main > .content-panel:first-of-type {
+    display: none;
   }
-}
+  body > .page > .main-frame .main-pane > main {
+    padding: 0;
+  }
+  body
+    > .page
+    > .main-frame
+    .main-pane
+    > main
+    > .content-panel
+    + .content-panel {
+    border-top: none !important;
+    padding: 0;
+  }
 
-.session-link {
-  color: var(--sl-color-white);
-  text-decoration: none;
-}
+  .local-sessions {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
 
-.session-link:hover {
-  color: var(--sl-color-accent);
-  text-decoration: underline;
-}
+  .local-sessions h1 {
+    color: var(--sl-color-white);
+    margin-bottom: 2rem;
+  }
 
-[data-section="row"] {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
+  .error-message {
+    background: var(--sl-color-red-low);
+    border: 1px solid var(--sl-color-red);
+    color: var(--sl-color-red-high);
+    padding: 1rem;
+    border-radius: 8px;
+    margin: 1rem 0;
+  }
 
-[data-section="stats"] {
-  list-style-type: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  gap: 0.5rem 1rem;
-  flex-wrap: wrap;
-}
+  .error-message p {
+    margin-top: 0.5rem;
+    font-size: 0.9em;
+    opacity: 0.8;
+  }
 
-[data-section="stats"] li {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.875rem;
-}
-</style> 
+  .empty-state {
+    color: var(--sl-color-gray-3);
+    text-align: center;
+    padding: 2rem;
+    font-style: italic;
+  }
+
+  .sessions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+  }
+
+  .session-item {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.5rem;
+    background: var(--sl-color-gray-6);
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 8px;
+    transition: all 0.2s ease;
+  }
+
+  .session-item:hover {
+    background: var(--sl-color-gray-5);
+    border-color: var(--sl-color-accent);
+  }
+
+  .session-title h3 {
+    font-size: 2rem;
+    font-weight: 500;
+    line-height: 1.2;
+    letter-spacing: -0.05em;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 30rem) {
+    .session-title h3 {
+      font-size: 1.75rem;
+      line-height: 1.25;
+    }
+  }
+
+  .session-link {
+    color: var(--sl-color-white);
+    text-decoration: none;
+  }
+
+  .session-link:hover {
+    color: var(--sl-color-accent);
+    text-decoration: underline;
+  }
+
+  [data-section="row"] {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  [data-section="stats"] {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    gap: 0.5rem 1rem;
+    flex-wrap: wrap;
+  }
+
+  [data-section="stats"] li {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+  }
+</style>
+
