@@ -12,6 +12,7 @@ import {
 import { watchSession } from "../lib/session-watcher"
 import type { Message } from "opencode/session/message"
 import type { Session } from "opencode/session/index"
+import "./share-overrides.css"
 
 interface SessionViewerProps {
   sessionId: string
