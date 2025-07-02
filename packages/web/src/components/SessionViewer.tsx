@@ -33,7 +33,7 @@ export default function SessionViewer(props: SessionViewerProps) {
   // Message sending state
   const [isSending, setIsSending] = createSignal(false)
   const [sendError, setSendError] = createSignal<string | null>(null)
-  const [sendSuccess, setSendSuccess] = createSignal(false)
+  const [clearInput, setClearInput] = createSignal(false)
 
   // Session info that can be updated in real-time
   const [sessionInfo, setSessionInfo] = createSignal<Session.Info>(
@@ -183,7 +183,7 @@ export default function SessionViewer(props: SessionViewerProps) {
   ) => {
     setIsSending(true)
     setSendError(null)
-    setSendSuccess(false)
+    setClearInput(false)
 
     try {
       let sessionId = actualSessionId()
@@ -281,8 +281,10 @@ export default function SessionViewer(props: SessionViewerProps) {
             setMessagesStore(completedMessage.id, completedMessage)
           }
 
-          setSendSuccess(true)
-          setTimeout(() => setSendSuccess(false), 3000)
+          // Clear the input on successful completion
+          setClearInput(true)
+          // Reset the clear flag after a short delay
+          setTimeout(() => setClearInput(false), 100)
 
           // Refresh messages when complete
           refreshMessages()
@@ -327,7 +329,7 @@ export default function SessionViewer(props: SessionViewerProps) {
         messages={messagesStore}
         isSending={isSending()}
         error={sendError()}
-        success={sendSuccess()}
+        clearInput={clearInput()}
         onSubmit={handleMessageSubmit}
       />
     </div>

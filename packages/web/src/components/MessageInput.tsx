@@ -1,4 +1,4 @@
-import { createSignal, Show, createMemo } from "solid-js"
+import { createSignal, Show, createMemo, createEffect } from "solid-js"
 import type { ProvidersResponse } from "../lib/local-session-utils"
 import type { Message } from "opencode/session/message"
 
@@ -9,12 +9,19 @@ interface MessageInputProps {
   messages: Record<string, Message.Info>
   isSending?: boolean
   error?: string | null
-  success?: boolean
+  clearInput?: boolean
   onSubmit?: (message: string, providerID: string, modelID: string) => void
 }
 
 export default function MessageInput(props: MessageInputProps) {
   const [message, setMessage] = createSignal("")
+
+  // Clear input when clearInput prop changes to true
+  createEffect(() => {
+    if (props.clearInput) {
+      setMessage("")
+    }
+  })
 
   // Get model from last message if available
   const getLastMessageModel = () => {
@@ -196,9 +203,6 @@ export default function MessageInput(props: MessageInputProps) {
 
     const { providerID, modelID } = validSelectedModel()
 
-    // Clear the input immediately
-    setMessage("")
-
     // Emit the submit event to parent
     props.onSubmit?.(messageText, providerID, modelID)
   }
@@ -281,17 +285,6 @@ export default function MessageInput(props: MessageInputProps) {
             Error
           </span>
           <span>{props.error}</span>
-        </div>
-      </Show>
-
-      <Show when={props.success}>
-        <div class="message-input-success">
-          <span data-color="green" data-marker="label" data-separator>
-            Success
-          </span>
-          <span>
-            Message sent successfully! The response will appear above.
-          </span>
         </div>
       </Show>
 
