@@ -1,0 +1,21 @@
+[data-section="part"][data-part-type="summary"] {
+  display: flex;
+  align-items: center;
+
+  [data-section="copy"] {
+    display: none !important;
+  }
+
+  [data-section="content"] {
+    padding: 0;
+  }
+
+  [data-section="decoration"] > [data-status] {
+    /* visibility: hidden !important; */
+    background: var(--sl-color-text-secondary) !important;
+
+    & ~ div {
+      display: none !important;
+    }
+  }
+}
