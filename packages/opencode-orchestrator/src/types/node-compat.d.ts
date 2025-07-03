@@ -25,3 +25,16 @@ declare module "fs/promises" {
 declare module "path" {
   export function join(...parts: string[]): string
 }
+
+// Global stubs
+declare const process: any
+declare const Bun: any
+
+declare module "os" {
+  export function homedir(): string
+}
+
+declare namespace Bun {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  type Subprocess<A = any, B = any, C = any> = any
+}
