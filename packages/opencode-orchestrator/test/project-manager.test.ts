@@ -290,9 +290,26 @@ describe("ProjectManager", () => {
       await expect(projectManager.startProject(project.id)).rejects.toThrow("Project is already running")
     })
 
-    test.skip("should handle process start failure", async () => {
-      // Skip this test as mocking process failure is complex
-      // This edge case is covered by integration tests
+    test("should handle process start failure", async () => {
+      const input: CreateProjectInput = { name: "fail-start", type: "empty" }
+      const project = await projectManager.createProject(input)
+
+      // Mock Bun.serve to throw error when finding port
+      const originalServe = Bun.serve
+      Bun.serve = mock(() => {
+        throw new Error("Port in use")
+      }) as any
+
+      try {
+        await expect(projectManager.startProject(project.id)).rejects.toThrow()
+        
+        const updatedProject = state.projects.get(project.id)
+        expect(updatedProject?.status).toBe("failed")
+        expect(updatedProject?.lastError).toBeDefined()
+      } finally {
+        // Restore original Bun.serve
+        Bun.serve = originalServe
+      }
     })
   })
 
