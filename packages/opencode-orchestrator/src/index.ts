@@ -8,10 +8,10 @@ import type { OrchestratorState } from "./types.js"
 
 async function main() {
   // Parse command line arguments
-  const args = process.argv.slice(2)
-  const portArg = args.find(arg => arg.startsWith("--port="))
-  const hostArg = args.find(arg => arg.startsWith("--hostname="))
-  const workspaceArg = args.find(arg => arg.startsWith("--workspace="))
+  const args = (process.argv as string[]).slice(2)
+  const portArg = args.find((arg: string) => arg.startsWith("--port="))
+  const hostArg = args.find((arg: string) => arg.startsWith("--hostname="))
+  const workspaceArg = args.find((arg: string) => arg.startsWith("--workspace="))
 
   const port = portArg ? parseInt(portArg.split("=")[1]) : 3000
   const hostname = hostArg ? hostArg.split("=")[1] : "127.0.0.1"
@@ -79,18 +79,18 @@ async function main() {
 }
 
 // Handle unhandled errors
-process.on("unhandledRejection", (error) => {
+process.on("unhandledRejection", (error: unknown) => {
   console.error("Unhandled rejection:", error)
   process.exit(1)
 })
 
-process.on("uncaughtException", (error) => {
+process.on("uncaughtException", (error: unknown) => {
   console.error("Uncaught exception:", error)
   process.exit(1)
 })
 
 // Start the application
-main().catch((error) => {
+main().catch((error: unknown) => {
   console.error("Failed to start OpenCode Orchestrator:", error)
   process.exit(1)
 })
