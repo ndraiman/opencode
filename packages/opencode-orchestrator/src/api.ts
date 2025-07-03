@@ -217,5 +217,56 @@ export function createApiRouter(projectManager: ProjectManager, proxyService: Pr
     }
   })
 
+  // Get available plugins
+  app.get("/plugins", async (c) => {
+    try {
+      const plugins = projectManager.getAvailablePlugins()
+      
+      return c.json({ 
+        plugins,
+        success: true
+      })
+    } catch (error) {
+      return c.json(
+        { 
+          error: error instanceof Error ? error.message : "Failed to get plugins",
+          success: false
+        },
+        500
+      )
+    }
+  })
+
+  // Get specific plugin information
+  app.get("/plugins/:type", async (c) => {
+    try {
+      const projectType = c.req.param("type")
+      const pluginInfo = projectManager.getPluginInfo(projectType)
+      
+      if (!pluginInfo) {
+        return c.json(
+          { 
+            error: `Plugin not found: ${projectType}`,
+            success: false
+          },
+          404
+        )
+      }
+      
+      return c.json({ 
+        plugin: pluginInfo,
+        success: true
+      })
+    } catch (error) {
+      return c.json(
+        { 
+          error: error instanceof Error ? error.message : "Failed to get plugin info",
+          success: false
+        },
+        500
+      )
+    }
+  })
+
   return app
 }

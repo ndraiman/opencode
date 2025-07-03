@@ -5,19 +5,16 @@ export type ProjectStatus = z.infer<typeof ProjectStatus>
 
 export const CreateProjectSchema = z.object({
   name: z.string().min(1, "Project name is required"),
-  type: z.enum(["git", "empty"]),
-  gitUrl: z.string().url().optional(),
-  gitBranch: z.string().optional(),
+  type: z.string(), // Now allows any string instead of enum
   description: z.string().optional(),
+  config: z.record(z.any()).optional(), // Plugin-specific configuration
 })
 export type CreateProjectInput = z.infer<typeof CreateProjectSchema>
 
 export const ProjectSchema = z.object({
   id: z.string(),
   name: z.string(),
-  type: z.enum(["git", "empty"]),
-  gitUrl: z.string().optional(),
-  gitBranch: z.string().optional(),
+  type: z.string(), // Now allows any string instead of enum
   description: z.string().optional(),
   status: ProjectStatus,
   path: z.string(),
@@ -26,6 +23,7 @@ export const ProjectSchema = z.object({
   createdAt: z.date(),
   updatedAt: z.date(),
   lastError: z.string().optional(),
+  config: z.record(z.any()).optional(), // Store plugin-specific configuration
 })
 export type Project = z.infer<typeof ProjectSchema>
 

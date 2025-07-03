@@ -2,17 +2,33 @@ import { randomUUID } from "node:crypto"
 import { mkdir, rm, access, readdir } from "node:fs/promises"
 import { join, resolve } from "node:path"
 import type { CreateProjectInput, Project, ProjectStatus, ProcessInfo, OrchestratorState } from "./types.js"
+import type { PluginRegistry } from "./plugins/types.js"
+import { createDefaultPluginRegistry } from "./plugins/index.js"
 
 export class ProjectManager {
   private state: OrchestratorState
   private workspaceDir: string
+  private pluginRegistry: PluginRegistry
 
-  constructor(state: OrchestratorState, workspaceDir: string) {
+  constructor(state: OrchestratorState, workspaceDir: string, pluginRegistry?: PluginRegistry) {
     this.state = state
     this.workspaceDir = workspaceDir
+    this.pluginRegistry = pluginRegistry || createDefaultPluginRegistry()
   }
 
   async createProject(input: CreateProjectInput): Promise<Project> {
+    // Get the appropriate plugin for this project type
+    const plugin = this.pluginRegistry.getPlugin(input.type)
+    if (!plugin) {
+      throw new Error(`Unknown project type: ${input.type}. Available types: ${this.pluginRegistry.listPlugins().map(p => p.projectType).join(", ")}`)
+    }
+
+    // Validate input using the plugin
+    const validation = await plugin.validateInput(input)
+    if (!validation.isValid) {
+      throw new Error(`Invalid input: ${validation.errors?.join(", ")}`)
+    }
+
     const id = randomUUID()
     const projectPath = join(this.workspaceDir, id)
 
@@ -23,23 +39,17 @@ export class ProjectManager {
       id,
       name: input.name,
       type: input.type,
-      gitUrl: input.gitUrl,
-      gitBranch: input.gitBranch,
       description: input.description,
       status: "stopped",
       path: projectPath,
       createdAt: new Date(),
       updatedAt: new Date(),
+      config: input.config,
     }
 
     try {
-      if (input.type === "git" && input.gitUrl) {
-        await this.cloneRepository(input.gitUrl, projectPath, input.gitBranch)
-      } else if (input.type === "empty") {
-        // Initialize empty project with basic structure
-        await this.initializeEmptyProject(projectPath)
-      }
-
+      // Use the plugin to create the project
+      await plugin.createProject(input, projectPath)
       project.status = "stopped"
     } catch (error) {
       project.status = "failed"
@@ -132,6 +142,12 @@ export class ProjectManager {
         lastError: undefined,
       })
 
+      // Allow plugin to perform additional setup
+      const plugin = this.pluginRegistry.getPlugin(project.type)
+      if (plugin?.setupProject) {
+        await plugin.setupProject(project, processInfo)
+      }
+
     } catch (error) {
       await this.updateProject(projectId, {
         status: "failed",
@@ -177,6 +193,12 @@ export class ProjectManager {
         pid: undefined,
       })
 
+      // Allow plugin to perform additional cleanup
+      const plugin = this.pluginRegistry.getPlugin(project.type)
+      if (plugin?.cleanupProject) {
+        await plugin.cleanupProject(project)
+      }
+
     } catch (error) {
       await this.updateProject(projectId, {
         status: "failed",
@@ -196,59 +218,33 @@ export class ProjectManager {
     return processInfo?.logs || []
   }
 
-  private async cloneRepository(gitUrl: string, targetPath: string, branch?: string): Promise<void> {
-    try {
-      // Use a simple git clone command instead of isomorphic-git for now
-      const result = await Bun.spawn({
-        cmd: ["git", "clone", "--depth", "1", ...(branch ? ["--branch", branch] : []), gitUrl, targetPath],
-        stdout: "pipe",
-        stderr: "pipe",
-      }).exited
-      
-      if (result !== 0) {
-        throw new Error("Git clone failed")
-      }
-    } catch (error) {
-      throw new Error(`Failed to clone repository: ${error instanceof Error ? error.message : 'Unknown error'}`)
+  // Plugin management methods
+  getAvailablePlugins() {
+    return this.pluginRegistry.listPlugins().map(plugin => ({
+      id: plugin.id,
+      name: plugin.name,
+      description: plugin.description,
+      projectType: plugin.projectType,
+      configSchema: plugin.getConfigSchema?.() || null,
+    }))
+  }
+
+  getPluginInfo(projectType: string) {
+    const plugin = this.pluginRegistry.getPlugin(projectType)
+    if (!plugin) {
+      return null
+    }
+
+    return {
+      id: plugin.id,
+      name: plugin.name,
+      description: plugin.description,
+      projectType: plugin.projectType,
+      configSchema: plugin.getConfigSchema?.() || null,
     }
   }
 
-  private async initializeEmptyProject(projectPath: string): Promise<void> {
-    // Create basic project structure
-    await mkdir(join(projectPath, "src"), { recursive: true })
-    
-    // Create a basic package.json
-    const packageJson = {
-      name: "opencode-project",
-      version: "1.0.0",
-      type: "module",
-      scripts: {
-        dev: "echo 'Hello from OpenCode project!'"
-      }
-    }
-    
-    await Bun.write(
-      join(projectPath, "package.json"),
-      JSON.stringify(packageJson, null, 2)
-    )
 
-    // Create a basic README
-    await Bun.write(
-      join(projectPath, "README.md"),
-      "# OpenCode Project\n\nThis is a new OpenCode project.\n"
-    )
-
-    // Create a basic TypeScript file
-    await Bun.write(
-      join(projectPath, "src/index.ts"),
-      `console.log("Hello from OpenCode!");
-
-export function greet(name: string): string {
-  return \`Hello, \${name}!\`;
-}
-`
-    )
-  }
 
   private async findAvailablePort(): Promise<number> {
     // Start from port 4096 and find the next available port
