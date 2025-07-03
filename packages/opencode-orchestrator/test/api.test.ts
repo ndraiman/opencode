@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach, mock } from "bun:test"
+import { describe, expect, test, beforeEach, mock, afterEach } from "bun:test"
 import { createApiRouter } from "../src/api.js"
 import type { ProjectManager } from "../src/project-manager.js"
 import type { ProxyService } from "../src/proxy.js"
@@ -93,6 +93,22 @@ describe("API Router", () => {
         fn.mockClear()
       }
     })
+    Object.values(mockProxyService).forEach(fn => {
+      if (typeof fn === 'function' && 'mockClear' in fn) {
+        fn.mockClear()
+      }
+    })
+  })
+
+  afterEach(() => {
+    // Clear all project manager mocks
+    Object.values(mockProjectManager).forEach(fn => {
+      if (typeof fn === 'function' && 'mockClear' in fn) {
+        fn.mockClear()
+      }
+    })
+    
+    // Clear all proxy service mocks  
     Object.values(mockProxyService).forEach(fn => {
       if (typeof fn === 'function' && 'mockClear' in fn) {
         fn.mockClear()
