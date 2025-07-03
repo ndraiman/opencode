@@ -1,6 +1,6 @@
-import { randomUUID } from "node:crypto"
-import { mkdir, rm } from "node:fs/promises"
-import { join } from "node:path"
+import { randomUUID } from "crypto"
+import { mkdir, rm } from "fs/promises"
+import { join } from "path"
 import type { CreateProjectInput, OrchestratorState, ProcessInfo, Project, ProjectStatus } from "../types.js"
 import type { ProjectHandler } from "./project-handler.js"
 
