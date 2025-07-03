@@ -11,8 +11,14 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  // Restore fetch global
   globalThis.fetch = originalFetch
+  
+  // Clear mock state
   mockFetch.mockClear()
+  
+  // Reset mock implementation to default
+  mockFetch.mockImplementation(() => Promise.resolve(new Response("mocked response", { status: 200 })))
 })
 
 describe("ProxyService", () => {

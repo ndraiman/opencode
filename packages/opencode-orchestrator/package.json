@@ -1,29 +1,36 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/orchestrator",
-  "version": "0.0.1",
-  "private": true,
+  "version": "0.1.0",
+  "description": "OpenCode Orchestrator API for managing multiple OpenCode instances",
   "type": "module",
-  "scripts": {
-    "typecheck": "tsc --noEmit",
-    "dev": "bun run --watch ./src/index.ts",
-    "start": "bun run ./src/index.ts",
-    "test": "bun test",
-    "test:watch": "bun test --watch",
-    "test:coverage": "bun test --coverage"
+  "main": "dist/index.js",
+  "bin": {
+    "opencode-orchestrator": "dist/index.js"
   },
-  "dependencies": {
-    "@hono/zod-validator": "0.5.0",
-    "hono": "4.7.10",
-    "hono-openapi": "0.4.8",
-    "remeda": "2.22.3",
-    "zod": "catalog:",
-    "zod-openapi": "4.2.4",
-    "zod-validation-error": "3.5.2"
+  "scripts": {
+    "build": "tsc",
+    "test": "bun test",
+    "test:clean": "find /tmp -name '*opencode-test*' -o -name '*orchestrator-test*' 2>/dev/null | xargs rm -rf || true",
+    "test:check": "bun test && echo 'Checking for leftovers...' && find /tmp -name '*opencode-test*' -o -name '*orchestrator-test*' 2>/dev/null | wc -l",
+    "dev": "bun --watch src/index.ts",
+    "start": "bun dist/index.js"
   },
   "devDependencies": {
-    "typescript": "catalog:",
-    "@types/node": "catalog:",
-    "@types/bun": "latest"
-  }
+    "@types/bun": "latest",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "hono": "^4.0.0",
+    "zod": "^3.22.0"
+  },
+  "keywords": [
+    "opencode",
+    "orchestrator",
+    "api",
+    "development",
+    "project-management"
+  ],
+  "author": "OpenCode Team",
+  "license": "MIT"
 }

@@ -1,7 +1,30 @@
 import { describe, expect, test, beforeEach, afterEach, mock } from "bun:test"
-import { mkdir, rm } from "node:fs/promises"
+import { mkdir, rm, chmod } from "node:fs/promises"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
+
+// Robust cleanup function
+async function cleanupDirectory(dirPath: string): Promise<void> {
+  try {
+    // First, try to make everything writable
+    try {
+      await chmod(dirPath, 0o777)
+    } catch (e) {
+      // Ignore chmod errors
+    }
+    
+    // Try to remove recursively  
+    await rm(dirPath, { recursive: true, force: true })
+  } catch (e) {
+    // If that fails, try a second time after a short delay
+    try {
+      await new Promise(resolve => setTimeout(resolve, 10))
+      await rm(dirPath, { recursive: true, force: true })
+    } catch (e) {
+      // Ignore final cleanup errors in tests
+    }
+  }
+}
 
 // Mock Bun.serve to avoid actually starting a server
 const mockServer = {
@@ -33,12 +56,20 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  // Restore original Bun methods
   // @ts-ignore
   Bun.serve = originalServe
   // @ts-ignore
   Bun.spawn = originalSpawn
+  
+  // Clear all mocks
   mockServe.mockClear()
   mockSpawn.mockClear()
+  
+  // Reset mock server state
+  if (mockServer.stop && typeof mockServer.stop.mockClear === 'function') {
+    mockServer.stop.mockClear()
+  }
 })
 
 describe("OpenCode Orchestrator Main", () => {
@@ -50,11 +81,11 @@ describe("OpenCode Orchestrator Main", () => {
   })
 
   afterEach(async () => {
-    try {
-      await rm(tempWorkspace, { recursive: true, force: true })
-    } catch (e) {
-      // Ignore cleanup errors
-    }
+    // Clean up temp directory
+    await cleanupDirectory(tempWorkspace)
+    
+    // Ensure no lingering process references
+    tempWorkspace = ""
   })
 
   test("should initialize orchestrator components", async () => {

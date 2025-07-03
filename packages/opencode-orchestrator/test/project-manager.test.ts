@@ -1,9 +1,32 @@
 import { describe, expect, test, beforeEach, afterEach, mock, spyOn } from "bun:test"
-import { mkdir, rm } from "node:fs/promises"
+import { mkdir, rm, chmod } from "node:fs/promises"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 import { ProjectManager } from "../src/project-manager.js"
 import type { OrchestratorState, CreateProjectInput } from "../src/types.js"
+
+// Robust cleanup function
+async function cleanupDirectory(dirPath: string): Promise<void> {
+  try {
+    // First, try to make everything writable
+    try {
+      await chmod(dirPath, 0o777)
+    } catch (e) {
+      // Ignore chmod errors
+    }
+    
+    // Try to remove recursively  
+    await rm(dirPath, { recursive: true, force: true })
+  } catch (e) {
+    // If that fails, try a second time after a short delay
+    try {
+      await new Promise(resolve => setTimeout(resolve, 10))
+      await rm(dirPath, { recursive: true, force: true })
+    } catch (e) {
+      // Ignore final cleanup errors in tests
+    }
+  }
+}
 
 // Mock Bun.spawn
 const mockSpawn = mock(() => ({
@@ -76,9 +99,24 @@ describe("ProjectManager", () => {
   })
 
   afterEach(async () => {
+    // Cleanup any running processes first
+    for (const [projectId, processInfo] of state.processes) {
+      try {
+        if (processInfo.process && typeof processInfo.process.kill === 'function') {
+          processInfo.process.kill('SIGTERM')
+        }
+      } catch (e) {
+        // Ignore cleanup errors
+      }
+    }
+    
+    // Clear state
+    state.projects.clear()
+    state.processes.clear()
+    
     // Clean up temp directory
     try {
-      await rm(tempWorkspace, { recursive: true, force: true })
+      await cleanupDirectory(tempWorkspace)
     } catch (e) {
       // Ignore cleanup errors in tests
     }
