@@ -3,6 +3,7 @@ import { join } from "node:path"
 import { homedir } from "node:os"
 import { ProjectManager } from "../../project-manager.js"
 import type { OrchestratorState } from "../../types.js"
+import { UI } from "../ui.js"
 
 interface ListOptions {
   workspace: string
@@ -58,11 +59,12 @@ export const ListCommand: CommandModule<{}, ListOptions> = {
       }
 
       if (projects.length === 0) {
+        UI.empty()
         if (status) {
-          console.log(`📭 No projects found with status "${status}"`)
+          UI.info(`No projects found with status "${status}"`)
         } else {
-          console.log("📭 No projects found")
-          console.log(`💡 Create a new project with: opencode-orchestrator create <name>`)
+          UI.info("No projects found")
+          UI.dim("Create a new project with: opencode-orchestrator create <name>")
         }
         return
       }
@@ -72,41 +74,41 @@ export const ListCommand: CommandModule<{}, ListOptions> = {
         console.log(JSON.stringify(projects, null, 2))
       } else {
         // Table output
-        console.log(`\n📋 Found ${projects.length} project(s):\n`)
+        UI.empty()
+        UI.header(`Found ${projects.length} project(s):`)
+        UI.empty()
         
         // Sort by creation date (newest first)
         projects.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 
         projects.forEach((project, index) => {
-          const statusIcon = getStatusIcon(project.status)
           const timeSince = getTimeSince(project.createdAt)
           
-          console.log(`${index + 1}. ${statusIcon} ${project.name}`)
-          console.log(`   ID: ${project.id}`)
-          console.log(`   Type: ${project.type}`)
-          console.log(`   Status: ${project.status}`)
+          UI.println(UI.listItem(index + 1, project.name, project.status))
+          UI.println("   " + UI.field("ID", project.id))
+          UI.println("   " + UI.field("Type", project.type))
           
           if (project.description) {
-            console.log(`   Description: ${project.description}`)
+            UI.println("   " + UI.field("Description", project.description))
           }
           
           if (project.port) {
-            console.log(`   Port: ${project.port}`)
+            UI.println("   " + UI.field("Port", project.port.toString()))
           }
           
           if (project.pid) {
-            console.log(`   PID: ${project.pid}`)
+            UI.println("   " + UI.field("PID", project.pid.toString()))
           }
           
-          console.log(`   Created: ${timeSince}`)
-          console.log(`   Path: ${project.path}`)
+          UI.println("   " + UI.field("Created", timeSince))
+          UI.println("   " + UI.field("Path", project.path))
           
           if (project.lastError) {
-            console.log(`   ⚠️  Last Error: ${project.lastError}`)
+            UI.println("   " + UI.Style.TEXT_DANGER_BOLD + "Last Error: " + UI.Style.TEXT_NORMAL + UI.Style.TEXT_DANGER + project.lastError + UI.Style.TEXT_NORMAL)
           }
           
           if (index < projects.length - 1) {
-            console.log("")
+            UI.empty()
           }
         })
 
@@ -116,35 +118,18 @@ export const ListCommand: CommandModule<{}, ListOptions> = {
           return acc
         }, {} as Record<string, number>)
 
-        console.log(`\n📊 Status Summary:`)
+        UI.empty()
+        UI.header("Status Summary:")
         Object.entries(statusCounts).forEach(([status, count]) => {
-          const icon = getStatusIcon(status as any)
-          console.log(`   ${icon} ${status}: ${count}`)
+          UI.println("   " + UI.projectStatus(status) + ": " + UI.Style.TEXT_NORMAL_BOLD + count + UI.Style.TEXT_NORMAL)
         })
       }
 
     } catch (error) {
-      console.error(`❌ Failed to list projects:`, error instanceof Error ? error.message : error)
+      UI.error(`Failed to list projects: ${error instanceof Error ? error.message : error}`)
       process.exit(1)
     }
   },
-}
-
-function getStatusIcon(status: string): string {
-  switch (status) {
-    case "running":
-      return "🟢"
-    case "stopped":
-      return "⚫"
-    case "starting":
-      return "🟡"
-    case "stopping":
-      return "🟠"
-    case "failed":
-      return "🔴"
-    default:
-      return "⚪"
-  }
 }
 
 function getTimeSince(date: Date): string {

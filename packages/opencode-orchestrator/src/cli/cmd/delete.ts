@@ -3,6 +3,7 @@ import { join } from "node:path"
 import { homedir } from "node:os"
 import { ProjectManager } from "../../project-manager.js"
 import type { OrchestratorState } from "../../types.js"
+import { UI } from "../ui.js"
 
 interface DeleteOptions {
   project: string
@@ -62,14 +63,15 @@ export const DeleteCommand: CommandModule<{}, DeleteOptions> = {
       )
 
       if (!project) {
-        console.error(`❌ Project not found: "${projectIdentifier}"`)
-        console.log(`\n💡 Available projects:`)
+        UI.error(`Project not found: "${projectIdentifier}"`)
+        UI.empty()
+        UI.header("Available projects:")
         
         if (projects.length === 0) {
-          console.log("   No projects found")
+          UI.dim("   No projects found")
         } else {
           projects.forEach(p => {
-            console.log(`   - ${p.name} (ID: ${p.id})`)
+            UI.println("   " + UI.Style.TEXT_NORMAL_BOLD + p.name + UI.Style.TEXT_NORMAL + " " + UI.Style.TEXT_DIM + `(ID: ${p.id})` + UI.Style.TEXT_NORMAL)
           })
         }
         
@@ -77,53 +79,60 @@ export const DeleteCommand: CommandModule<{}, DeleteOptions> = {
       }
 
       // Show project info
-      console.log(`\n🗂️  Project to delete:`)
-      console.log(`   Name: ${project.name}`)
-      console.log(`   ID: ${project.id}`)
-      console.log(`   Type: ${project.type}`)
-      console.log(`   Status: ${project.status}`)
-      console.log(`   Path: ${project.path}`)
-      console.log(`   Created: ${project.createdAt.toISOString()}`)
+      UI.empty()
+      UI.header("Project to delete:")
+      UI.println("   " + UI.field("Name", project.name, true))
+      UI.println("   " + UI.field("ID", project.id))
+      UI.println("   " + UI.field("Type", project.type))
+      UI.println("   " + UI.field("Status", project.status))
+      UI.println("   " + UI.field("Path", project.path))
+      UI.println("   " + UI.field("Created", project.createdAt.toISOString()))
       
       if (project.description) {
-        console.log(`   Description: ${project.description}`)
+        UI.println("   " + UI.field("Description", project.description))
       }
 
       // Warn if project is running
       if (project.status === "running") {
-        console.log(`\n⚠️  Warning: Project is currently running and will be stopped before deletion.`)
+        UI.empty()
+        UI.warning("Project is currently running and will be stopped before deletion.")
       }
 
       // Confirmation unless forced or confirmed
       if (!force && !confirm) {
-        console.log(`\n🚨 This action will permanently delete the project and all its files.`)
-        console.log(`⚠️  This cannot be undone!`)
+        UI.empty()
+        UI.println(UI.Style.TEXT_DANGER_BOLD + "This action will permanently delete the project and all its files." + UI.Style.TEXT_NORMAL)
+        UI.println(UI.Style.TEXT_DANGER_BOLD + "This cannot be undone!" + UI.Style.TEXT_NORMAL)
         
         // In a real CLI, you'd use a proper prompt library like inquirer
         // For now, we'll require explicit confirmation flags
-        console.log(`\n❌ Deletion cancelled. Use --force or --confirm to proceed.`)
-        console.log(`💡 Run: opencode-orchestrator delete "${projectIdentifier}" --confirm`)
+        UI.empty()
+        UI.error("Deletion cancelled. Use --force or --confirm to proceed.")
+        UI.dim(`Run: opencode-orchestrator delete "${projectIdentifier}" --confirm`)
         process.exit(1)
       }
 
       // Perform deletion
-      console.log(`\n🗑️  Deleting project "${project.name}"...`)
+      UI.empty()
+      UI.println(UI.Style.TEXT_INFO_BOLD + "Deleting project " + UI.Style.TEXT_NORMAL + `"${project.name}"...`)
       
       if (project.status === "running") {
-        console.log(`⏹️  Stopping running project...`)
+        UI.println(UI.Style.TEXT_WARNING_BOLD + "Stopping running project..." + UI.Style.TEXT_NORMAL)
       }
       
       await projectManager.deleteProject(project.id)
       
-      console.log(`✅ Project "${project.name}" deleted successfully!`)
-      console.log(`🧹 Cleaned up project directory: ${project.path}`)
+      UI.empty()
+      UI.success(`Project "${project.name}" deleted successfully!`)
+      UI.dim(`Cleaned up project directory: ${project.path}`)
 
       // Show remaining projects count
       const remainingProjects = await projectManager.listProjects()
-      console.log(`\n📊 Remaining projects: ${remainingProjects.length}`)
+      UI.empty()
+      UI.println(UI.field("Remaining projects", remainingProjects.length.toString()))
 
     } catch (error) {
-      console.error(`❌ Failed to delete project "${projectIdentifier}":`, error instanceof Error ? error.message : error)
+      UI.error(`Failed to delete project "${projectIdentifier}": ${error instanceof Error ? error.message : error}`)
       process.exit(1)
     }
   },

@@ -4,6 +4,7 @@ import { join } from "node:path"
 import { homedir } from "node:os"
 import { ProjectManager } from "../../project-manager.js"
 import type { OrchestratorState } from "../../types.js"
+import { UI } from "../ui.js"
 
 interface CreateOptions {
   name: string
@@ -81,26 +82,29 @@ export const CreateCommand: CommandModule<{}, CreateOptions> = {
         config: parsedConfig,
       })
 
-      console.log(`✅ Project "${name}" created successfully!`)
-      console.log(`📁 Project ID: ${project.id}`)
-      console.log(`🏠 Project path: ${project.path}`)
-      console.log(`📅 Created at: ${project.createdAt.toISOString()}`)
+      UI.empty()
+      UI.success(`Project "${name}" created successfully!`)
+      UI.empty()
+      UI.println(UI.field("Project ID", project.id, true))
+      UI.println(UI.field("Project path", project.path))
+      UI.println(UI.field("Created at", project.createdAt.toISOString()))
       
       if (project.description) {
-        console.log(`📝 Description: ${project.description}`)
+        UI.println(UI.field("Description", project.description))
       }
 
       // Show available plugins if they exist
       const availablePlugins = projectManager.getAvailablePlugins()
       if (availablePlugins.length > 1) {
-        console.log(`\n🔌 Available project types for future projects:`)
+        UI.empty()
+        UI.header("Available project types for future projects:")
         availablePlugins.forEach(plugin => {
-          console.log(`  - ${plugin.projectType}: ${plugin.description}`)
+          UI.println(UI.Style.TEXT_DIM + "  - " + UI.Style.TEXT_NORMAL + plugin.projectType + ": " + UI.Style.TEXT_DIM + plugin.description + UI.Style.TEXT_NORMAL)
         })
       }
 
     } catch (error) {
-      console.error(`❌ Failed to create project "${name}":`, error instanceof Error ? error.message : error)
+      UI.error(`Failed to create project "${name}": ${error instanceof Error ? error.message : error}`)
       process.exit(1)
     }
   },
