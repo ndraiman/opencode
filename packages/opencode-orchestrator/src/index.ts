@@ -1,6 +1,9 @@
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { StartCommand } from "./cli/cmd/start.js"
+import { CreateCommand } from "./cli/cmd/create.js"
+import { ListCommand } from "./cli/cmd/list.js"
+import { DeleteCommand } from "./cli/cmd/delete.js"
 import { Log } from "./util/log.js"
 import { UI } from "./cli/ui.js"
 import { Installation } from "./installation/index.js"
@@ -45,6 +48,9 @@ const cli = yargs(args)
   })
   .usage("\n" + UI.logo())
   .command(StartCommand)
+  .command(CreateCommand)
+  .command(ListCommand)
+  .command(DeleteCommand)
   .fail((msg) => {
     if (
       msg.startsWith("Unknown argument") ||
