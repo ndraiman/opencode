@@ -1,3 +1,20 @@
+/**
+ * Git Plugin Unit Tests
+ *
+ * This file contains unit tests for the Git plugin:
+ * - Test business logic, validation, and command construction with mocked operations
+ * - Fast execution, suitable for continuous development
+ * - Uses mocks to avoid actual git operations
+ *
+ * For integration tests that verify actual git operations, see:
+ * `git-plugin.integration.test.ts`
+ *
+ * Usage:
+ * - Run unit tests: `bun test test/git-plugin.test.ts`
+ * - Run all tests: `bun test`
+ * - Run only unit tests: `bun run test:unit`
+ */
+
 import { describe, expect, test, beforeEach, afterEach, mock } from "bun:test"
 import { mkdir, rm } from "node:fs/promises"
 import { join } from "node:path"
@@ -12,7 +29,7 @@ async function cleanupDirectory(dirPath: string): Promise<void> {
   } catch (e) {
     // Try again after a short delay
     try {
-      await new Promise(resolve => setTimeout(resolve, 10))
+      await new Promise((resolve) => setTimeout(resolve, 10))
       await rm(dirPath, { recursive: true, force: true })
     } catch (e) {
       // Ignore final cleanup errors in tests
@@ -29,7 +46,7 @@ describe("GitPlugin", () => {
     gitPlugin = new GitPlugin()
     tempDir = join(tmpdir(), `git-plugin-test-${Date.now()}`)
     await mkdir(tempDir, { recursive: true })
-    
+
     // Store original Bun.spawn
     originalSpawn = Bun.spawn
   })
@@ -37,7 +54,7 @@ describe("GitPlugin", () => {
   afterEach(async () => {
     // Restore original Bun.spawn
     Bun.spawn = originalSpawn
-    
+
     // Clean up temp directory
     await cleanupDirectory(tempDir)
   })
@@ -46,7 +63,9 @@ describe("GitPlugin", () => {
     test("should have correct metadata", () => {
       expect(gitPlugin.meta.id).toBe("git-plugin")
       expect(gitPlugin.meta.name).toBe("Git Repository Plugin")
-      expect(gitPlugin.meta.description).toBe("Creates projects by cloning Git repositories")
+      expect(gitPlugin.meta.description).toBe(
+        "Creates projects by cloning Git repositories",
+      )
       expect(gitPlugin.meta.projectType).toBe("git")
       expect(gitPlugin.meta.version).toBe("1.0.0")
       expect(gitPlugin.meta.author).toBe("OpenCode Team")
@@ -60,8 +79,8 @@ describe("GitPlugin", () => {
         name: "test-project",
         type: "git",
         config: {
-          gitUrl: "https://github.com/user/repo.git"
-        }
+          gitUrl: "https://github.com/user/repo.git",
+        },
       }
 
       const result = await gitPlugin.validate(input)
@@ -75,7 +94,7 @@ describe("GitPlugin", () => {
       const input: CreateProjectInput = {
         name: "test-project",
         type: "git",
-        config: {}
+        config: {},
       }
 
       const result = await gitPlugin.validate(input)
@@ -89,8 +108,8 @@ describe("GitPlugin", () => {
         name: "test-project",
         type: "git",
         config: {
-          gitUrl: "not-a-valid-url"
-        }
+          gitUrl: "not-a-valid-url",
+        },
       }
 
       const result = await gitPlugin.validate(input)
@@ -105,8 +124,8 @@ describe("GitPlugin", () => {
         type: "git",
         config: {
           gitUrl: "https://github.com/user/repo.git",
-          gitBranch: "main..evil"
-        }
+          gitBranch: "main..evil",
+        },
       }
 
       const result = await gitPlugin.validate(input)
@@ -121,8 +140,8 @@ describe("GitPlugin", () => {
         type: "git",
         config: {
           gitUrl: "https://github.com/user/repo.git",
-          gitBranch: "--evil-branch"
-        }
+          gitBranch: "--evil-branch",
+        },
       }
 
       const result = await gitPlugin.validate(input)
@@ -137,8 +156,8 @@ describe("GitPlugin", () => {
         type: "git",
         config: {
           gitUrl: "https://github.com/user/repo.git",
-          gitBranch: "feature/new-feature"
-        }
+          gitBranch: "feature/new-feature",
+        },
       }
 
       const result = await gitPlugin.validate(input)
@@ -153,14 +172,16 @@ describe("GitPlugin", () => {
         type: "git",
         config: {
           gitUrl: "https://github.com/user/repo.git",
-          depth: 1
-        }
+          depth: 1,
+        },
       }
 
       const result = await gitPlugin.validate(input)
 
       expect(result.isValid).toBe(true)
-      expect(result.warnings).toContain("Using shallow clone (depth=1). Full history will not be available.")
+      expect(result.warnings).toContain(
+        "Using shallow clone (depth=1). Full history will not be available.",
+      )
     })
 
     test("should accept SSH URLs", async () => {
@@ -168,8 +189,8 @@ describe("GitPlugin", () => {
         name: "test-project",
         type: "git",
         config: {
-          gitUrl: "git@github.com:user/repo.git"
-        }
+          gitUrl: "git@github.com:user/repo.git",
+        },
       }
 
       const result = await gitPlugin.validate(input)
@@ -183,8 +204,8 @@ describe("GitPlugin", () => {
         name: "test-project",
         type: "git",
         config: {
-          gitUrl: "file:///path/to/repo.git"
-        }
+          gitUrl: "file:///path/to/repo.git",
+        },
       }
 
       const result = await gitPlugin.validate(input)
@@ -199,42 +220,50 @@ describe("GitPlugin", () => {
       const input: CreateProjectInput = {
         name: "test-project",
         type: "git",
-        config: {}
+        config: {},
       }
 
-      await expect(gitPlugin.create(input, tempDir)).rejects.toThrow("Git URL is required")
+      await expect(gitPlugin.create(input, tempDir)).rejects.toThrow(
+        "Git URL is required",
+      )
     })
 
     test("should successfully clone repository", async () => {
       // Mock successful git clone
       const mockSpawn = mock(() => ({
-        exited: Promise.resolve(0)
+        exited: Promise.resolve(0),
       }))
-      
+
       Bun.spawn = mockSpawn as any
 
       const input: CreateProjectInput = {
         name: "test-project",
         type: "git",
         config: {
-          gitUrl: "https://github.com/user/repo.git"
-        }
+          gitUrl: "https://github.com/user/repo.git",
+        },
       }
 
       await gitPlugin.create(input, tempDir)
 
       expect(mockSpawn).toHaveBeenCalledWith({
-        cmd: ["git", "clone", "--recurse-submodules", "https://github.com/user/repo.git", tempDir],
+        cmd: [
+          "git",
+          "clone",
+          "--recurse-submodules",
+          "https://github.com/user/repo.git",
+          tempDir,
+        ],
         stdout: "pipe",
-        stderr: "pipe"
+        stderr: "pipe",
       })
     })
 
     test("should clone with specific branch", async () => {
       const mockSpawn = mock(() => ({
-        exited: Promise.resolve(0)
+        exited: Promise.resolve(0),
       }))
-      
+
       Bun.spawn = mockSpawn as any
 
       const input: CreateProjectInput = {
@@ -242,24 +271,32 @@ describe("GitPlugin", () => {
         type: "git",
         config: {
           gitUrl: "https://github.com/user/repo.git",
-          gitBranch: "develop"
-        }
+          gitBranch: "develop",
+        },
       }
 
       await gitPlugin.create(input, tempDir)
 
       expect(mockSpawn).toHaveBeenCalledWith({
-        cmd: ["git", "clone", "--branch", "develop", "--recurse-submodules", "https://github.com/user/repo.git", tempDir],
+        cmd: [
+          "git",
+          "clone",
+          "--branch",
+          "develop",
+          "--recurse-submodules",
+          "https://github.com/user/repo.git",
+          tempDir,
+        ],
         stdout: "pipe",
-        stderr: "pipe"
+        stderr: "pipe",
       })
     })
 
     test("should clone with custom depth", async () => {
       const mockSpawn = mock(() => ({
-        exited: Promise.resolve(0)
+        exited: Promise.resolve(0),
       }))
-      
+
       Bun.spawn = mockSpawn as any
 
       const input: CreateProjectInput = {
@@ -267,24 +304,32 @@ describe("GitPlugin", () => {
         type: "git",
         config: {
           gitUrl: "https://github.com/user/repo.git",
-          depth: 5
-        }
+          depth: 5,
+        },
       }
 
       await gitPlugin.create(input, tempDir)
 
       expect(mockSpawn).toHaveBeenCalledWith({
-        cmd: ["git", "clone", "--depth", "5", "--recurse-submodules", "https://github.com/user/repo.git", tempDir],
+        cmd: [
+          "git",
+          "clone",
+          "--depth",
+          "5",
+          "--recurse-submodules",
+          "https://github.com/user/repo.git",
+          tempDir,
+        ],
         stdout: "pipe",
-        stderr: "pipe"
+        stderr: "pipe",
       })
     })
 
     test("should clone with recursive option (always enabled)", async () => {
       const mockSpawn = mock(() => ({
-        exited: Promise.resolve(0)
+        exited: Promise.resolve(0),
       }))
-      
+
       Bun.spawn = mockSpawn as any
 
       const input: CreateProjectInput = {
@@ -292,24 +337,30 @@ describe("GitPlugin", () => {
         type: "git",
         config: {
           gitUrl: "https://github.com/user/repo.git",
-          recursive: true
-        }
+          recursive: true,
+        },
       }
 
       await gitPlugin.create(input, tempDir)
 
       expect(mockSpawn).toHaveBeenCalledWith({
-        cmd: ["git", "clone", "--recurse-submodules", "https://github.com/user/repo.git", tempDir],
+        cmd: [
+          "git",
+          "clone",
+          "--recurse-submodules",
+          "https://github.com/user/repo.git",
+          tempDir,
+        ],
         stdout: "pipe",
-        stderr: "pipe"
+        stderr: "pipe",
       })
     })
 
     test("should clone with all options", async () => {
       const mockSpawn = mock(() => ({
-        exited: Promise.resolve(0)
+        exited: Promise.resolve(0),
       }))
-      
+
       Bun.spawn = mockSpawn as any
 
       const input: CreateProjectInput = {
@@ -319,78 +370,74 @@ describe("GitPlugin", () => {
           gitUrl: "https://github.com/user/repo.git",
           gitBranch: "feature/test",
           depth: 10,
-          recursive: true
-        }
+          recursive: true,
+        },
       }
 
       await gitPlugin.create(input, tempDir)
 
       expect(mockSpawn).toHaveBeenCalledWith({
-        cmd: ["git", "clone", "--depth", "10", "--branch", "feature/test", "--recurse-submodules", "https://github.com/user/repo.git", tempDir],
+        cmd: [
+          "git",
+          "clone",
+          "--depth",
+          "10",
+          "--branch",
+          "feature/test",
+          "--recurse-submodules",
+          "https://github.com/user/repo.git",
+          tempDir,
+        ],
         stdout: "pipe",
-        stderr: "pipe"
+        stderr: "pipe",
       })
     })
 
     test("should handle git clone failure", async () => {
       const mockSpawn = mock(() => ({
-        exited: Promise.resolve(1) // Non-zero exit code indicates failure
+        exited: Promise.resolve(1), // Non-zero exit code indicates failure
       }))
-      
+
       Bun.spawn = mockSpawn as any
 
       const input: CreateProjectInput = {
         name: "test-project",
         type: "git",
         config: {
-          gitUrl: "https://github.com/nonexistent/repo.git"
-        }
+          gitUrl: "https://github.com/nonexistent/repo.git",
+        },
       }
 
-      await expect(gitPlugin.create(input, tempDir)).rejects.toThrow("Failed to clone repository: Git clone failed")
+      await expect(gitPlugin.create(input, tempDir)).rejects.toThrow(
+        "Failed to clone repository: Git clone failed",
+      )
     })
 
     test("should handle spawn errors", async () => {
       const mockSpawn = mock(() => {
         throw new Error("Spawn failed")
       })
-      
+
       Bun.spawn = mockSpawn as any
 
       const input: CreateProjectInput = {
         name: "test-project",
         type: "git",
         config: {
-          gitUrl: "https://github.com/user/repo.git"
-        }
+          gitUrl: "https://github.com/user/repo.git",
+        },
       }
 
-      await expect(gitPlugin.create(input, tempDir)).rejects.toThrow("Failed to clone repository: Spawn failed")
+      await expect(gitPlugin.create(input, tempDir)).rejects.toThrow(
+        "Failed to clone repository: Spawn failed",
+      )
     })
 
     test("should handle unknown errors", async () => {
       const mockSpawn = mock(() => {
         throw "Unknown error"
       })
-      
-      Bun.spawn = mockSpawn as any
 
-      const input: CreateProjectInput = {
-        name: "test-project",
-        type: "git",
-        config: {
-          gitUrl: "https://github.com/user/repo.git"
-        }
-      }
-
-      await expect(gitPlugin.create(input, tempDir)).rejects.toThrow("Failed to clone repository: Unknown error")
-    })
-
-    test("should skip depth option when depth is 0", async () => {
-      const mockSpawn = mock(() => ({
-        exited: Promise.resolve(0)
-      }))
-      
       Bun.spawn = mockSpawn as any
 
       const input: CreateProjectInput = {
@@ -398,24 +445,50 @@ describe("GitPlugin", () => {
         type: "git",
         config: {
           gitUrl: "https://github.com/user/repo.git",
-          depth: 0
-        }
+        },
+      }
+
+      await expect(gitPlugin.create(input, tempDir)).rejects.toThrow(
+        "Failed to clone repository: Unknown error",
+      )
+    })
+
+    test("should skip depth option when depth is 0", async () => {
+      const mockSpawn = mock(() => ({
+        exited: Promise.resolve(0),
+      }))
+
+      Bun.spawn = mockSpawn as any
+
+      const input: CreateProjectInput = {
+        name: "test-project",
+        type: "git",
+        config: {
+          gitUrl: "https://github.com/user/repo.git",
+          depth: 0,
+        },
       }
 
       await gitPlugin.create(input, tempDir)
 
       expect(mockSpawn).toHaveBeenCalledWith({
-        cmd: ["git", "clone", "--recurse-submodules", "https://github.com/user/repo.git", tempDir],
+        cmd: [
+          "git",
+          "clone",
+          "--recurse-submodules",
+          "https://github.com/user/repo.git",
+          tempDir,
+        ],
         stdout: "pipe",
-        stderr: "pipe"
+        stderr: "pipe",
       })
     })
 
     test("should handle negative depth values", async () => {
       const mockSpawn = mock(() => ({
-        exited: Promise.resolve(0)
+        exited: Promise.resolve(0),
       }))
-      
+
       Bun.spawn = mockSpawn as any
 
       const input: CreateProjectInput = {
@@ -423,17 +496,23 @@ describe("GitPlugin", () => {
         type: "git",
         config: {
           gitUrl: "https://github.com/user/repo.git",
-          depth: -1
-        }
+          depth: -1,
+        },
       }
 
       await gitPlugin.create(input, tempDir)
 
       // Negative depth should be treated as 0 and skip the depth option
       expect(mockSpawn).toHaveBeenCalledWith({
-        cmd: ["git", "clone", "--recurse-submodules", "https://github.com/user/repo.git", tempDir],
+        cmd: [
+          "git",
+          "clone",
+          "--recurse-submodules",
+          "https://github.com/user/repo.git",
+          tempDir,
+        ],
         stdout: "pipe",
-        stderr: "pipe"
+        stderr: "pipe",
       })
     })
   })
@@ -443,7 +522,7 @@ describe("GitPlugin", () => {
       const input: CreateProjectInput = {
         name: "test-project",
         type: "git",
-        config: {}
+        config: {},
       }
 
       const result = await gitPlugin.validate(input)
@@ -455,7 +534,7 @@ describe("GitPlugin", () => {
       const input: CreateProjectInput = {
         name: "test-project",
         type: "git",
-        config: null as any
+        config: null as any,
       }
 
       const result = await gitPlugin.validate(input)
@@ -466,7 +545,7 @@ describe("GitPlugin", () => {
     test("should handle undefined config", async () => {
       const input: CreateProjectInput = {
         name: "test-project",
-        type: "git"
+        type: "git",
         // config is undefined
       }
 
@@ -481,8 +560,8 @@ describe("GitPlugin", () => {
         type: "git",
         config: {
           gitUrl: "https://github.com/user/repo.git",
-          gitBranch: "feature/test-branch_v1.0"
-        }
+          gitBranch: "feature/test-branch_v1.0",
+        },
       }
 
       const result = await gitPlugin.validate(input)
@@ -500,8 +579,8 @@ describe("GitPlugin", () => {
           gitUrl: "https://github.com/user/repo.git",
           gitBranch: "main",
           depth: 1,
-          recursive: true
-        }
+          recursive: true,
+        },
       }
 
       // The plugin should use the schema for validation
@@ -515,8 +594,8 @@ describe("GitPlugin", () => {
         type: "git",
         config: {
           gitUrl: "https://github.com/user/repo.git",
-          depth: -5 // Invalid depth
-        }
+          depth: -5, // Invalid depth
+        },
       }
 
       const result = await gitPlugin.validate(input)
