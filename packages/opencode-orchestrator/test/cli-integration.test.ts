@@ -39,87 +39,122 @@ describe("CLI Integration Tests", () => {
     await cleanupDirectory(tempWorkspace)
   })
 
+  // Helper functions for common test patterns
+  function captureConsole() {
+    const logs: string[] = []
+    const errors: string[] = []
+    const originalLog = console.log
+    const originalError = console.error
+    
+    console.log = (message: string) => logs.push(message)
+    console.error = (message: string) => errors.push(message)
+    
+    return {
+      logs,
+      errors,
+      restore: () => {
+        console.log = originalLog
+        console.error = originalError
+      },
+      clear: () => {
+        logs.length = 0
+        errors.length = 0
+      }
+    }
+  }
+
+  function captureProcessExit() {
+    const originalExit = process.exit
+    let exitCode = 0
+    
+    process.exit = ((code: number) => {
+      exitCode = code
+      throw new Error(`Process exit with code ${code}`)
+    }) as any
+    
+    return {
+      get exitCode() { return exitCode },
+      restore: () => { process.exit = originalExit }
+    }
+  }
+
+  function buildArgs() {
+    return {
+      create: (overrides: any = {}) => ({
+        name: "test-project",
+        type: "empty",
+        description: "Test project",
+        workspace: tempWorkspace,
+        config: undefined,
+        ...overrides
+      }),
+      list: (overrides: any = {}) => ({
+        workspace: tempWorkspace,
+        format: "table",
+        status: undefined,
+        ...overrides
+      }),
+      delete: (overrides: any = {}) => ({
+        project: "test-project",
+        workspace: tempWorkspace,
+        force: false,
+        confirm: false,
+        ...overrides
+      })
+    }
+  }
+
   test("should create, list, and delete project in full workflow", async () => {
     const projectName = "integration-test-project"
-    let consoleLogs: string[] = []
-    let consoleErrors: string[] = []
-
-    // Mock console to capture all output
-    const originalConsoleLog = console.log
-    const originalConsoleError = console.error
-    
-    console.log = (message: string) => {
-      consoleLogs.push(message)
-      originalConsoleLog(message)
-    }
-    console.error = (message: string) => {
-      consoleErrors.push(message)
-      originalConsoleError(message)
-    }
+    const console = captureConsole()
+    const args = buildArgs()
 
     try {
       // Step 1: Create a project
-      await CreateCommand.handler({
+      await CreateCommand.handler(args.create({
         name: projectName,
-        type: "empty",
-        description: "Integration test project",
-        workspace: tempWorkspace,
-        config: undefined,
-      } as any)
+        description: "Integration test project"
+      }) as any)
 
       // Verify project was created
-      expect(consoleErrors.some(msg => msg.includes("created successfully"))).toBe(true)
-      expect(consoleErrors.some(msg => msg.includes(projectName))).toBe(true)
+      expect(console.errors.some(msg => msg.includes("created successfully"))).toBe(true)
+      expect(console.errors.some(msg => msg.includes(projectName))).toBe(true)
 
-      // Clear console logs for next step
-      consoleLogs = []
-      consoleErrors = []
+      // Clear console for next step
+      console.clear()
 
       // Step 2: List projects (should show the created project)
-      await ListCommand.handler({
-        workspace: tempWorkspace,
-        format: "table",
-        status: undefined,
-      } as any)
+      await ListCommand.handler(args.list() as any)
 
       // Verify project appears in list
-      expect(consoleErrors.some(msg => msg.includes("Found 1 project(s)"))).toBe(true)
-      expect(consoleErrors.some(msg => msg.includes(projectName))).toBe(true)
-      expect(consoleErrors.some(msg => msg.includes("stopped"))).toBe(true)
+      expect(console.errors.some(msg => msg.includes("Found 1 project(s)"))).toBe(true)
+      expect(console.errors.some(msg => msg.includes(projectName))).toBe(true)
+      expect(console.errors.some(msg => msg.includes("stopped"))).toBe(true)
 
-      // Clear console logs for next step
-      consoleLogs = []
-      consoleErrors = []
+      // Clear console for next step
+      console.clear()
 
       // Step 3: Delete the project
-      await DeleteCommand.handler({
+      await DeleteCommand.handler(args.delete({
         project: projectName,
-        workspace: tempWorkspace,
-        force: false,
-        confirm: true,
-      } as any)
+        confirm: true
+      }) as any)
 
       // Verify project was deleted
-      expect(consoleErrors.some(msg => msg.includes("deleted successfully"))).toBe(true)
-      expect(consoleErrors.some(msg => msg.includes(projectName))).toBe(true)
+      expect(console.errors.some(msg => msg.includes("deleted successfully"))).toBe(true)
+      expect(console.errors.some(msg => msg.includes(projectName))).toBe(true)
 
-      // Clear console logs for final step
-      consoleLogs = []
-      consoleErrors = []
+      // Clear console for final step
+      console.clear()
 
       // Step 4: List projects again (should be empty)
-      await ListCommand.handler({
-        workspace: tempWorkspace,
-        format: "table",
-        status: undefined,
-      } as any)
+      await ListCommand.handler(args.list() as any)
 
       // Verify no projects remain
-      expect(consoleErrors.some(msg => msg.includes("No projects found"))).toBe(true)
+      expect(console.errors.some(msg => msg.includes("No projects found"))).toBe(true)
 
     } finally {
-      console.log = originalConsoleLog
-      console.error = originalConsoleError
+      console.restore()
     }
   })
 

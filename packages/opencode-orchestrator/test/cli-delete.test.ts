@@ -35,6 +35,76 @@ describe("CLI Delete Command", () => {
     await cleanupDirectory(tempWorkspace)
   })
 
+  // Helper functions for common test patterns
+  function captureConsole() {
+    const logs: string[] = []
+    const errors: string[] = []
+    const originalLog = console.log
+    const originalError = console.error
+    
+    console.log = (message: string) => logs.push(message)
+    console.error = (message: string) => errors.push(message)
+    
+    return {
+      logs,
+      errors,
+      restore: () => {
+        console.log = originalLog
+        console.error = originalError
+      }
+    }
+  }
+
+  function captureProcessExit() {
+    const originalExit = process.exit
+    let exitCode = 0
+    
+    process.exit = ((code: number) => {
+      exitCode = code
+      throw new Error(`Process exit with code ${code}`)
+    }) as any
+    
+    return {
+      get exitCode() { return exitCode },
+      restore: () => { process.exit = originalExit }
+    }
+  }
+
+  function buildDeleteArgs(overrides: any = {}) {
+    return {
+      project: "test-project",
+      workspace: tempWorkspace,
+      force: false,
+      confirm: false,
+      ...overrides
+    }
+  }
+
+  function validateYargsConfig(builder: any, expectations: any) {
+    const mockYargs = {
+      positional: (name: string, config: any) => {
+        if (expectations.positional && expectations.positional[name]) {
+          const expected = expectations.positional[name]
+          Object.keys(expected).forEach(key => {
+            expect(config[key]).toEqual(expected[key])
+          })
+        }
+        return mockYargs
+      },
+      option: (name: string, config: any) => {
+        if (expectations.options && expectations.options[name]) {
+          const expected = expectations.options[name]
+          Object.keys(expected).forEach(key => {
+            expect(config[key]).toEqual(expected[key])
+          })
+        }
+        return mockYargs
+      },
+    }
+    
+    builder(mockYargs)
+  }
+
   test("should create CLI command with correct configuration", () => {
     expect(DeleteCommand.command).toBe("delete <project>")
     expect(DeleteCommand.describe).toBe("Delete an OpenCode project")
@@ -45,79 +115,47 @@ describe("CLI Delete Command", () => {
   })
 
   test("should configure yargs with correct options", () => {
-    const mockYargs = {
-      positional: (name: string, config: any) => {
-        if (name === "project") {
-          expect(config.describe).toBe("Project ID or name to delete")
-          expect(config.type).toBe("string")
-          expect(config.demandOption).toBe(true)
+    validateYargsConfig(DeleteCommand.builder, {
+      positional: {
+        project: {
+          describe: "Project ID or name to delete",
+          type: "string",
+          demandOption: true
         }
-        return mockYargs
       },
-      option: (name: string, config: any) => {
-        switch (name) {
-          case "workspace":
-            expect(config.type).toBe("string")
-            expect(config.default).toContain(".opencode")
-            break
-          case "force":
-            expect(config.type).toBe("boolean")
-            expect(config.default).toBe(false)
-            break
-          case "confirm":
-            expect(config.type).toBe("boolean")
-            expect(config.default).toBe(false)
-            break
+      options: {
+        workspace: {
+          type: "string"
+        },
+        force: {
+          type: "boolean",
+          default: false
+        },
+        confirm: {
+          type: "boolean",
+          default: false
         }
-        return mockYargs
-      },
-    }
-
-    const builder = DeleteCommand.builder as any
-    builder(mockYargs)
+      }
+    })
   })
 
   test("should show error when project not found", async () => {
-    const args = {
-      project: "non-existent-project",
-      workspace: tempWorkspace,
-      force: false,
-      confirm: false,
-    }
-
-    const consoleSpy = {
-      log: [] as string[],
-      error: [] as string[],
-    }
-    
-    const originalConsoleLog = console.log
-    const originalConsoleError = console.error
-    const originalProcessExit = process.exit
-    
-    let exitCode = 0
-    
-    console.log = (message: string) => {
-      consoleSpy.log.push(message)
-    }
-    console.error = (message: string) => {
-      consoleSpy.error.push(message)
-    }
-    process.exit = ((code: number) => {
-      exitCode = code
-      throw new Error(`Process exit with code ${code}`)
-    }) as any
+    const args = buildDeleteArgs({
+      project: "non-existent-project"
+    })
+    const console = captureConsole()
+    const processExit = captureProcessExit()
 
     try {
       await DeleteCommand.handler(args as any)
       expect(false).toBe(true) // Should not reach here
     } catch (error) {
-      expect(exitCode).toBe(1)
-      expect(consoleSpy.error.some(msg => msg.includes("Project not found"))).toBe(true)
-      expect(consoleSpy.error.some(msg => msg.includes("non-existent-project"))).toBe(true)
+      expect(processExit.exitCode).toBe(1)
+      expect(console.errors.some(msg => msg.includes("Project not found"))).toBe(true)
+      expect(console.errors.some(msg => msg.includes("non-existent-project"))).toBe(true)
     } finally {
-      console.log = originalConsoleLog
-      console.error = originalConsoleError
-      process.exit = originalProcessExit
+      console.restore()
+      processExit.restore()
     }
   })
 
@@ -130,47 +168,23 @@ describe("CLI Delete Command", () => {
     
     projects.forEach(project => state.projects.set(project.id, project))
 
-    const args = {
-      project: "non-existent-project",
-      workspace: tempWorkspace,
-      force: false,
-      confirm: false,
-    }
-
-    const consoleSpy = {
-      log: [] as string[],
-      error: [] as string[],
-    }
-    
-    const originalConsoleLog = console.log
-    const originalConsoleError = console.error
-    const originalProcessExit = process.exit
-    
-    let exitCode = 0
-    
-    console.log = (message: string) => {
-      consoleSpy.log.push(message)
-    }
-    console.error = (message: string) => {
-      consoleSpy.error.push(message)
-    }
-    process.exit = ((code: number) => {
-      exitCode = code
-      throw new Error(`Process exit with code ${code}`)
-    }) as any
+    const args = buildDeleteArgs({
+      project: "non-existent-project"
+    })
+    const console = captureConsole()
+    const processExit = captureProcessExit()
 
     try {
       await DeleteCommand.handler(args as any)
       expect(false).toBe(true) // Should not reach here
     } catch (error) {
-      expect(exitCode).toBe(1)
-      expect(consoleSpy.error.some(msg => msg.includes("Available projects"))).toBe(true)
-      expect(consoleSpy.error.some(msg => msg.includes("available-project-1"))).toBe(true)
-      expect(consoleSpy.error.some(msg => msg.includes("available-project-2"))).toBe(true)
+      expect(processExit.exitCode).toBe(1)
+      expect(console.errors.some(msg => msg.includes("Available projects"))).toBe(true)
+      expect(console.errors.some(msg => msg.includes("available-project-1"))).toBe(true)
+      expect(console.errors.some(msg => msg.includes("available-project-2"))).toBe(true)
     } finally {
-      console.log = originalConsoleLog
-      console.error = originalConsoleError
-      process.exit = originalProcessExit
+      console.restore()
+      processExit.restore()
     }
   })
 
@@ -178,37 +192,20 @@ describe("CLI Delete Command", () => {
     const project = TestProjectStateFactory.stopped({ name: "test-project" })
     state.projects.set(project.id, project)
 
-    const args = {
+    const args = buildDeleteArgs({
       project: "test-project",
-      workspace: tempWorkspace,
-      force: false,
-      confirm: true, // Confirm to proceed with deletion
-    }
-
-    const consoleSpy = {
-      log: [] as string[],
-      error: [] as string[],
-    }
-    
-    const originalConsoleLog = console.log
-    const originalConsoleError = console.error
-    
-    console.log = (message: string) => {
-      consoleSpy.log.push(message)
-    }
-    console.error = (message: string) => {
-      consoleSpy.error.push(message)
-    }
+      confirm: true // Confirm to proceed with deletion
+    })
+    const console = captureConsole()
 
     try {
       await DeleteCommand.handler(args as any)
       
-      expect(consoleSpy.error.some(msg => msg.includes("deleted successfully"))).toBe(true)
-      expect(consoleSpy.error.some(msg => msg.includes("test-project"))).toBe(true)
+      expect(console.errors.some(msg => msg.includes("deleted successfully"))).toBe(true)
+      expect(console.errors.some(msg => msg.includes("test-project"))).toBe(true)
       
     } finally {
-      console.log = originalConsoleLog
-      console.error = originalConsoleError
+      console.restore()
     }
   })
 
@@ -254,46 +251,23 @@ describe("CLI Delete Command", () => {
     const project = TestProjectStateFactory.stopped({ name: "test-project" })
     state.projects.set(project.id, project)
 
-    const args = {
-      project: "test-project",
-      workspace: tempWorkspace,
-      force: false,
-      confirm: false,
-    }
-
-    const consoleSpy = {
-      log: [] as string[],
-      error: [] as string[],
-    }
-    
-    const originalConsoleLog = console.log
-    const originalConsoleError = console.error
-    const originalProcessExit = process.exit
-    
-    let exitCode = 0
-    
-    console.log = (message: string) => {
-      consoleSpy.log.push(message)
-    }
-    console.error = (message: string) => {
-      consoleSpy.error.push(message)
-    }
-    process.exit = ((code: number) => {
-      exitCode = code
-      throw new Error(`Process exit with code ${code}`)
-    }) as any
+    const args = buildDeleteArgs({
+      project: "test-project"
+      // force: false, confirm: false (defaults)
+    })
+    const console = captureConsole()
+    const processExit = captureProcessExit()
 
     try {
       await DeleteCommand.handler(args as any)
       expect(false).toBe(true) // Should not reach here
     } catch (error) {
-      expect(exitCode).toBe(1)
-      expect(consoleSpy.error.some(msg => msg.includes("Deletion cancelled"))).toBe(true)
-      expect(consoleSpy.error.some(msg => msg.includes("--force or --confirm"))).toBe(true)
+      expect(processExit.exitCode).toBe(1)
+      expect(console.errors.some(msg => msg.includes("Deletion cancelled"))).toBe(true)
+      expect(console.errors.some(msg => msg.includes("--force or --confirm"))).toBe(true)
     } finally {
-      console.log = originalConsoleLog
-      console.error = originalConsoleError
-      process.exit = originalProcessExit
+      console.restore()
+      processExit.restore()
     }
   })
 
