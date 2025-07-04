@@ -155,8 +155,10 @@ describe("ProjectManager", () => {
       const input: CreateProjectInput = {
         name: "git-project", 
         type: "git",
-        gitUrl: "https://github.com/user/repo.git",
-        gitBranch: "main"
+        config: {
+          gitUrl: "https://github.com/user/repo.git",
+          gitBranch: "main"
+        }
       }
 
       const project = await projectManager.createProject(input)
@@ -164,8 +166,8 @@ describe("ProjectManager", () => {
       expect(project).toBeDefined()
       expect(project.name).toBe("git-project")
       expect(project.type).toBe("git")
-      expect(project.gitUrl).toBe("https://github.com/user/repo.git")
-      expect(project.gitBranch).toBe("main")
+      expect(project.config?.gitUrl).toBe("https://github.com/user/repo.git")
+      expect(project.config?.gitBranch).toBe("main")
       expect(mockSpawn).toHaveBeenCalledWith(
         expect.objectContaining({
           cmd: expect.arrayContaining(["git", "clone"])
@@ -205,15 +207,15 @@ describe("ProjectManager", () => {
       // Verify Bun.write was called to create files
       expect(mockWrite).toHaveBeenCalledWith(
         expect.stringContaining("package.json"),
-        expect.stringContaining("opencode-project")
+        expect.stringContaining("structured-project")
       )
       expect(mockWrite).toHaveBeenCalledWith(
         expect.stringContaining("README.md"),
-        expect.stringContaining("OpenCode Project")
+        expect.stringContaining("structured-project")
       )
       expect(mockWrite).toHaveBeenCalledWith(
         expect.stringContaining("src/index.ts"),
-        expect.stringContaining("Hello from OpenCode")
+        expect.stringContaining("Hello from structured-project")
       )
     })
   })

@@ -70,6 +70,7 @@ export class GitPlugin implements ProjectPlugin {
     return GitConfigSchema
   }
 
+
   private async cloneRepository(
     gitUrl: string,
     targetPath: string,
@@ -111,13 +112,4 @@ export class GitPlugin implements ProjectPlugin {
     }
   }
 
-  async setupProject?(project: Project, processInfo: ProcessInfo): Promise<void> {
-    // Git projects don't need additional setup beyond cloning
-    // This could be extended in the future for git-specific configurations
-  }
-
-  async cleanupProject?(project: Project): Promise<void> {
-    // Git projects don't need special cleanup beyond directory removal
-    // This could be extended for git-specific cleanup (e.g., stopping git daemons)
-  }
 }

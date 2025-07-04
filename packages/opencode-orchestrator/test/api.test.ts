@@ -11,13 +11,12 @@ const mockProjectManager = {
       id: "test-project-id",
       name: input.name,
       type: input.type,
-      gitUrl: input.gitUrl,
-      gitBranch: input.gitBranch,
       description: input.description,
       status: "stopped",
       path: "/path/to/project",
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
+      config: input.config
     }
   }),
   listProjects: mock(async () => []),
@@ -157,8 +156,10 @@ describe("API Router", () => {
       const projectData = {
         name: "git-project",
         type: "git",
-        gitUrl: "https://github.com/user/repo.git",
-        gitBranch: "main"
+        config: {
+          gitUrl: "https://github.com/user/repo.git",
+          gitBranch: "main"
+        }
       }
 
       const request = new Request("http://localhost:3000/projects", {
@@ -172,7 +173,7 @@ describe("API Router", () => {
       expect(response.status).toBe(201)
       const json = await response.json()
       expect(json.name).toBe("git-project")
-      expect(json.gitUrl).toBe("https://github.com/user/repo.git")
+      expect(json.config.gitUrl).toBe("https://github.com/user/repo.git")
     })
 
     test("should validate request body", async () => {

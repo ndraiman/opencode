@@ -33,9 +33,11 @@ describe("Types and Schemas", () => {
       const validInput: CreateProjectInput = {
         name: "test-project",
         type: "git",
-        gitUrl: "https://github.com/user/repo.git",
-        gitBranch: "main",
-        description: "Test project"
+        description: "Test project",
+        config: {
+          gitUrl: "https://github.com/user/repo.git",
+          gitBranch: "main"
+        }
       }
 
       expect(() => CreateProjectSchema.parse(validInput)).not.toThrow()
@@ -76,15 +78,6 @@ describe("Types and Schemas", () => {
       expect(() => CreateProjectSchema.parse(invalidInput)).toThrow()
     })
 
-    test("should reject invalid git URL", () => {
-      const invalidInput = {
-        name: "test",
-        type: "git",
-        gitUrl: "not-a-url"
-      }
-
-      expect(() => CreateProjectSchema.parse(invalidInput)).toThrow()
-    })
   })
 
   describe("ProjectSchema", () => {
