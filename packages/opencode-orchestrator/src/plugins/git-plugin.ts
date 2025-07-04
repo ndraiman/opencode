@@ -59,8 +59,7 @@ export class GitPlugin implements ProjectPlugin {
       config.gitUrl as string,
       projectPath,
       config.gitBranch as string | undefined,
-      config.depth as number | undefined,
-      config.recursive as boolean | undefined
+      config.depth as number | undefined
     )
   }
 
@@ -68,8 +67,7 @@ export class GitPlugin implements ProjectPlugin {
     gitUrl: string,
     targetPath: string,
     branch?: string,
-    depth?: number,
-    recursive: boolean = true
+    depth?: number
   ): Promise<void> {
     try {
       const args = ["git", "clone"]
