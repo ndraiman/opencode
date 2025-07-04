@@ -11,8 +11,8 @@
   "scripts": {
     "build": "tsc",
     "test": "bun test",
-    "test:unit": "bun test test/api.test.ts test/git-plugin.test.ts test/index.test.ts test/project-manager.test.ts test/proxy.test.ts test/types.test.ts",
-    "test:integration": "bun test test/*.integration.test.ts",
+    "test:unit": "bun test test/api.test.ts test/git-plugin.test.ts test/index.test.ts test/project-manager.test.ts test/proxy.test.ts test/types.test.ts test/cli-create.test.ts test/cli-list.test.ts test/cli-delete.test.ts test/cli-ui.test.ts",
+    "test:integration": "bun test test/*.integration.test.ts test/cli-integration.test.ts",
     "test:clean": "find /tmp -name '*opencode-test*' -o -name '*orchestrator-test*' -o -name '*git-source*' -o -name '*git-target*' -o -name '*submodule*' 2>/dev/null | xargs rm -rf || true",
     "test:check": "bun test && echo 'Checking for leftovers...' && find /tmp -name '*opencode-test*' -o -name '*orchestrator-test*' -o -name '*git-source*' -o -name '*git-target*' 2>/dev/null | wc -l",
     "dev": "bun --watch src/index.ts",
