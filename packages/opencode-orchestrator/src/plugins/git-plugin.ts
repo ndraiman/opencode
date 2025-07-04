@@ -1,21 +1,19 @@
-import { z } from "zod"
 import type { ProjectPlugin, ValidationResult, CreateProjectInput } from "./types.js"
 import type { Project, ProcessInfo } from "../types.js"
-
-const GitConfigSchema = z.object({
-  gitUrl: z.string().url("Must be a valid URL"),
-  gitBranch: z.string().optional(),
-  depth: z.number().min(1).optional().default(1),
-  recursive: z.boolean().optional().default(false),
-})
+import { GitConfigSchema, type GitPluginConfig } from "./config-types.js"
 
 export class GitPlugin implements ProjectPlugin {
-  readonly id = "git-plugin"
-  readonly name = "Git Repository Plugin"
-  readonly description = "Creates projects by cloning Git repositories"
-  readonly projectType = "git"
+  readonly meta = {
+    id: "git-plugin",
+    name: "Git Repository Plugin",
+    description: "Creates projects by cloning Git repositories",
+    projectType: "git",
+    configSchema: GitConfigSchema,
+    version: "1.0.0",
+    author: "OpenCode Team"
+  }
 
-  async validateInput(input: CreateProjectInput): Promise<ValidationResult> {
+  async validate(input: CreateProjectInput): Promise<ValidationResult> {
     const errors: string[] = []
     const warnings: string[] = []
 
@@ -51,7 +49,7 @@ export class GitPlugin implements ProjectPlugin {
     }
   }
 
-  async createProject(input: CreateProjectInput, projectPath: string): Promise<void> {
+  async create(input: CreateProjectInput, projectPath: string): Promise<void> {
     const config = input.config
     if (!config?.gitUrl) {
       throw new Error("Git URL is required")
@@ -65,11 +63,6 @@ export class GitPlugin implements ProjectPlugin {
       config.recursive as boolean | undefined
     )
   }
-
-  getConfigSchema(): z.ZodSchema<any> {
-    return GitConfigSchema
-  }
-
 
   private async cloneRepository(
     gitUrl: string,
@@ -111,5 +104,4 @@ export class GitPlugin implements ProjectPlugin {
       throw new Error(`Failed to clone repository: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
-
 }

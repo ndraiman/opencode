@@ -20,13 +20,15 @@ export class ProjectManager {
     // Get the appropriate plugin for this project type
     const plugin = this.pluginRegistry.getPlugin(input.type)
     if (!plugin) {
-      throw new Error(`Unknown project type: ${input.type}. Available types: ${this.pluginRegistry.listPlugins().map(p => p.projectType).join(", ")}`)
+      throw new Error(`Unknown project type: ${input.type}. Available types: ${this.pluginRegistry.listPlugins().map(p => p.meta.projectType).join(", ")}`)
     }
 
     // Validate input using the plugin
-    const validation = await plugin.validateInput(input)
-    if (!validation.isValid) {
-      throw new Error(`Invalid input: ${validation.errors?.join(", ")}`)
+    if (plugin.validate) {
+      const validation = await plugin.validate(input)
+      if (!validation.isValid) {
+        throw new Error(`Invalid input: ${validation.errors?.join(", ")}`)
+      }
     }
 
     const id = randomUUID()
@@ -49,7 +51,7 @@ export class ProjectManager {
 
     try {
       // Use the plugin to create the project
-      await plugin.createProject(input, projectPath)
+      await plugin.create(input, projectPath)
       project.status = "stopped"
     } catch (error) {
       project.status = "failed"
@@ -144,8 +146,8 @@ export class ProjectManager {
 
       // Allow plugin to perform additional setup
       const plugin = this.pluginRegistry.getPlugin(project.type)
-      if (plugin?.setupProject) {
-        await plugin.setupProject(project, processInfo)
+      if (plugin?.lifecycle?.setup) {
+        await plugin.lifecycle.setup(project, processInfo)
       }
 
     } catch (error) {
@@ -195,8 +197,8 @@ export class ProjectManager {
 
       // Allow plugin to perform additional cleanup
       const plugin = this.pluginRegistry.getPlugin(project.type)
-      if (plugin?.cleanupProject) {
-        await plugin.cleanupProject(project)
+      if (plugin?.lifecycle?.cleanup) {
+        await plugin.lifecycle.cleanup(project)
       }
 
     } catch (error) {
@@ -221,11 +223,13 @@ export class ProjectManager {
   // Plugin management methods
   getAvailablePlugins() {
     return this.pluginRegistry.listPlugins().map(plugin => ({
-      id: plugin.id,
-      name: plugin.name,
-      description: plugin.description,
-      projectType: plugin.projectType,
-      configSchema: plugin.getConfigSchema?.() || null,
+      id: plugin.meta.id,
+      name: plugin.meta.name,
+      description: plugin.meta.description,
+      projectType: plugin.meta.projectType,
+      version: plugin.meta.version,
+      author: plugin.meta.author,
+      configSchema: plugin.meta.configSchema || null,
     }))
   }
 
@@ -236,11 +240,13 @@ export class ProjectManager {
     }
 
     return {
-      id: plugin.id,
-      name: plugin.name,
-      description: plugin.description,
-      projectType: plugin.projectType,
-      configSchema: plugin.getConfigSchema?.() || null,
+      id: plugin.meta.id,
+      name: plugin.meta.name,
+      description: plugin.meta.description,
+      projectType: plugin.meta.projectType,
+      version: plugin.meta.version,
+      author: plugin.meta.author,
+      configSchema: plugin.meta.configSchema || null,
     }
   }
 

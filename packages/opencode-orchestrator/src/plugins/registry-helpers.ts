@@ -26,13 +26,9 @@ export function createPluginRegistry(plugins: (ProjectPlugin | PluginConstructor
 /**
  * Creates a plugin registry with default plugins
  */
-export function createDefaultPluginRegistry(): PluginRegistry {
-  // Dynamic imports to avoid circular dependencies
-  const plugins = []
-  
-  // We'll populate this with actual plugin instances
-  // This is a simplified version - in practice you'd import the actual plugins
-  
+export function createDefaultPluginRegistryHelper(): PluginRegistry {
+  // This is a helper function - the main one is in index.ts
+  const plugins: ProjectPlugin[] = []
   return createPluginRegistry(plugins)
 }
 

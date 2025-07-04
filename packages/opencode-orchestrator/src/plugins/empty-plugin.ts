@@ -1,110 +1,90 @@
-import { z } from "zod"
 import { mkdir } from "node:fs/promises"
 import { join } from "node:path"
-import type { ProjectPlugin, ValidationResult, CreateProjectInput } from "./types.js"
+import type { ProjectPlugin, ValidationResult, CreateProjectInput, PluginLifecycle } from "./types.js"
 import type { Project, ProcessInfo } from "../types.js"
-
-const EmptyConfigSchema = z.object({
-  template: z.enum(["basic", "typescript", "node", "web"]).optional().default("basic"),
-  createGitRepo: z.boolean().optional().default(false),
-  includeReadme: z.boolean().optional().default(true),
-})
+import { EmptyConfigSchema, type EmptyPluginConfig } from "./config-types.js"
+import { createTemplateRegistryWithDefaults } from "../templates/index.js"
 
 export class EmptyPlugin implements ProjectPlugin {
-  readonly id = "empty-plugin"
-  readonly name = "Empty Project Plugin"
-  readonly description = "Creates empty projects with basic scaffolding"
-  readonly projectType = "empty"
+  readonly meta = {
+    id: "empty-plugin",
+    name: "Empty Project Plugin",
+    description: "Creates empty projects with customizable templates",
+    projectType: "empty",
+    configSchema: EmptyConfigSchema,
+    version: "2.0.0",
+    author: "OpenCode Team"
+  }
 
-  async validateInput(input: CreateProjectInput): Promise<ValidationResult> {
-    const warnings: string[] = []
+  private templateRegistry = createTemplateRegistryWithDefaults()
 
-    // Validate template if provided
-    if (input.config?.template) {
-      const validTemplates = ["basic", "typescript", "node", "web"]
-      if (!validTemplates.includes(input.config.template as string)) {
+  async validate(input: CreateProjectInput): Promise<ValidationResult> {
+    try {
+      // Parse config with defaults - handle undefined config
+      const config = EmptyConfigSchema.parse(input.config || {})
+      const warnings: string[] = []
+
+      // Check if template exists
+      const template = this.templateRegistry.get(config.template)
+      if (!template) {
         return {
           isValid: false,
-          errors: [`Invalid template. Must be one of: ${validTemplates.join(", ")}`],
+          errors: [`Template '${config.template}' not found`]
         }
       }
-    }
 
-    // Provide helpful warnings
-    if (!input.config?.template || input.config.template === "basic") {
-      warnings.push("Using basic template. Consider using 'typescript', 'node', or 'web' for more features.")
-    }
+      // Provide helpful warnings
+      if (config.template === "basic") {
+        warnings.push("Using basic template. Consider using 'typescript', 'node', or 'web' for more features.")
+      }
 
-    return {
-      isValid: true,
-      warnings: warnings.length > 0 ? warnings : undefined,
+      return {
+        isValid: true,
+        warnings: warnings.length > 0 ? warnings : undefined,
+      }
+    } catch (error) {
+      return {
+        isValid: false,
+        errors: ["Invalid configuration: " + (error instanceof Error ? error.message : 'Unknown error')]
+      }
     }
   }
 
-  async createProject(input: CreateProjectInput, projectPath: string): Promise<void> {
-    const config = input.config || {}
-    const template = config.template as string || "basic"
-    const createGitRepo = config.createGitRepo as boolean || false
-    const includeReadme = config.includeReadme as boolean ?? true
-
-    await this.initializeEmptyProject(
-      projectPath,
-      input.name,
-      template,
-      createGitRepo,
-      includeReadme
-    )
-  }
-
-  getConfigSchema(): z.ZodSchema<any> {
-    return EmptyConfigSchema
-  }
-
-  private async initializeEmptyProject(
-    projectPath: string,
-    projectName: string,
-    template: string,
-    createGitRepo: boolean,
-    includeReadme: boolean
-  ): Promise<void> {
+  async create(input: CreateProjectInput, projectPath: string): Promise<void> {
+    const config = EmptyConfigSchema.parse(input.config || {})
+    
     // Create basic project structure
     await mkdir(join(projectPath, "src"), { recursive: true })
 
-    // Create package.json based on template
-    const packageJson = this.generatePackageJson(projectName, template)
+    // Create package.json
+    const packageJson = this.generatePackageJson(input.name, config)
     await Bun.write(
       join(projectPath, "package.json"),
       JSON.stringify(packageJson, null, 2)
     )
 
     // Create README if requested
-    if (includeReadme) {
-      const readmeContent = this.generateReadme(projectName, template)
+    if (config.includeReadme) {
+      const readmeContent = this.generateReadme(input.name, config.template)
       await Bun.write(join(projectPath, "README.md"), readmeContent)
     }
 
-    // Create template-specific files
-    switch (template) {
-      case "typescript":
-        await this.createTypeScriptFiles(projectPath, projectName)
-        break
-      case "node":
-        await this.createNodeFiles(projectPath, projectName)
-        break
-      case "web":
-        await this.createWebFiles(projectPath, projectName)
-        break
-      default:
-        await this.createBasicFiles(projectPath, projectName)
+    // Use template system to create template-specific files
+    const template = this.templateRegistry.get(config.template)
+    if (template) {
+      await template.generate(projectPath, { 
+        projectName: input.name,
+        ...config
+      })
     }
 
     // Initialize git repository if requested
-    if (createGitRepo) {
+    if (config.createGitRepo) {
       await this.initializeGitRepository(projectPath)
     }
   }
 
-  private generatePackageJson(projectName: string, template: string): any {
+  private generatePackageJson(projectName: string, config: EmptyPluginConfig): any {
     const base = {
       name: projectName.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
       version: "1.0.0",
@@ -113,7 +93,7 @@ export class EmptyPlugin implements ProjectPlugin {
       type: "module",
     }
 
-    switch (template) {
+    switch (config.template) {
       case "typescript":
         return {
           ...base,
@@ -197,31 +177,6 @@ npm run dev
 
 *Created with OpenCode*
 `
-  }
-
-  private async createBasicFiles(projectPath: string, projectName: string): Promise<void> {
-    const { BasicTemplate } = await import("../templates/basic-template.js")
-    const template = new BasicTemplate()
-    await template.generate(projectPath, { projectName })
-  }
-
-  private async createTypeScriptFiles(projectPath: string, projectName: string): Promise<void> {
-    // Use the new template system for consistency but maintain backward compatibility
-    const { TypeScriptTemplate } = await import("../templates/typescript-template.js")
-    const template = new TypeScriptTemplate()
-    await template.generate(projectPath, { projectName })
-  }
-
-  private async createNodeFiles(projectPath: string, projectName: string): Promise<void> {
-    const { NodeTemplate } = await import("../templates/node-template.js")
-    const template = new NodeTemplate()
-    await template.generate(projectPath, { projectName })
-  }
-
-  private async createWebFiles(projectPath: string, projectName: string): Promise<void> {
-    const { WebTemplate } = await import("../templates/web-template.js")
-    const template = new WebTemplate()
-    await template.generate(projectPath, { projectName })
   }
 
   private async initializeGitRepository(projectPath: string): Promise<void> {

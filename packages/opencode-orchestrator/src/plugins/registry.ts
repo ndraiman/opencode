@@ -5,11 +5,11 @@ export class DefaultPluginRegistry implements PluginRegistry {
   private defaultPluginId: string | null = null
 
   registerPlugin(plugin: ProjectPlugin): void {
-    this.plugins.set(plugin.projectType, plugin)
+    this.plugins.set(plugin.meta.projectType, plugin)
     
     // Set the first registered plugin as default if none is set
     if (this.defaultPluginId === null) {
-      this.defaultPluginId = plugin.projectType
+      this.defaultPluginId = plugin.meta.projectType
     }
   }
 
