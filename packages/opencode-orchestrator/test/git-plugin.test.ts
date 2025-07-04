@@ -68,7 +68,7 @@ describe("GitPlugin", () => {
 
       expect(result.isValid).toBe(true)
       expect(result.errors).toBeUndefined()
-      expect(result.warnings).toContain("Using shallow clone (depth=1). Full history will not be available.")
+      expect(result.warnings).toBeUndefined()
     })
 
     test("should fail validation without git URL", async () => {
@@ -147,20 +147,20 @@ describe("GitPlugin", () => {
       expect(result.errors).toBeUndefined()
     })
 
-    test("should not warn about shallow clone when depth > 1", async () => {
+    test("should warn about shallow clone when depth=1", async () => {
       const input: CreateProjectInput = {
         name: "test-project",
         type: "git",
         config: {
           gitUrl: "https://github.com/user/repo.git",
-          depth: 10
+          depth: 1
         }
       }
 
       const result = await gitPlugin.validate(input)
 
       expect(result.isValid).toBe(true)
-      expect(result.warnings).toBeUndefined()
+      expect(result.warnings).toContain("Using shallow clone (depth=1). Full history will not be available.")
     })
 
     test("should accept SSH URLs", async () => {
@@ -224,7 +224,7 @@ describe("GitPlugin", () => {
       await gitPlugin.create(input, tempDir)
 
       expect(mockSpawn).toHaveBeenCalledWith({
-        cmd: ["git", "clone", "--depth", "1", "https://github.com/user/repo.git", tempDir],
+        cmd: ["git", "clone", "--recurse-submodules", "https://github.com/user/repo.git", tempDir],
         stdout: "pipe",
         stderr: "pipe"
       })
@@ -249,7 +249,7 @@ describe("GitPlugin", () => {
       await gitPlugin.create(input, tempDir)
 
       expect(mockSpawn).toHaveBeenCalledWith({
-        cmd: ["git", "clone", "--depth", "1", "--branch", "develop", "https://github.com/user/repo.git", tempDir],
+        cmd: ["git", "clone", "--branch", "develop", "--recurse-submodules", "https://github.com/user/repo.git", tempDir],
         stdout: "pipe",
         stderr: "pipe"
       })
@@ -274,13 +274,13 @@ describe("GitPlugin", () => {
       await gitPlugin.create(input, tempDir)
 
       expect(mockSpawn).toHaveBeenCalledWith({
-        cmd: ["git", "clone", "--depth", "5", "https://github.com/user/repo.git", tempDir],
+        cmd: ["git", "clone", "--depth", "5", "--recurse-submodules", "https://github.com/user/repo.git", tempDir],
         stdout: "pipe",
         stderr: "pipe"
       })
     })
 
-    test("should clone with recursive option", async () => {
+    test("should clone with recursive option (always enabled)", async () => {
       const mockSpawn = mock(() => ({
         exited: Promise.resolve(0)
       }))
@@ -299,7 +299,7 @@ describe("GitPlugin", () => {
       await gitPlugin.create(input, tempDir)
 
       expect(mockSpawn).toHaveBeenCalledWith({
-        cmd: ["git", "clone", "--depth", "1", "--recursive", "https://github.com/user/repo.git", tempDir],
+        cmd: ["git", "clone", "--recurse-submodules", "https://github.com/user/repo.git", tempDir],
         stdout: "pipe",
         stderr: "pipe"
       })
@@ -326,7 +326,7 @@ describe("GitPlugin", () => {
       await gitPlugin.create(input, tempDir)
 
       expect(mockSpawn).toHaveBeenCalledWith({
-        cmd: ["git", "clone", "--depth", "10", "--branch", "feature/test", "--recursive", "https://github.com/user/repo.git", tempDir],
+        cmd: ["git", "clone", "--depth", "10", "--branch", "feature/test", "--recurse-submodules", "https://github.com/user/repo.git", tempDir],
         stdout: "pipe",
         stderr: "pipe"
       })
@@ -405,7 +405,7 @@ describe("GitPlugin", () => {
       await gitPlugin.create(input, tempDir)
 
       expect(mockSpawn).toHaveBeenCalledWith({
-        cmd: ["git", "clone", "https://github.com/user/repo.git", tempDir],
+        cmd: ["git", "clone", "--recurse-submodules", "https://github.com/user/repo.git", tempDir],
         stdout: "pipe",
         stderr: "pipe"
       })
@@ -431,7 +431,7 @@ describe("GitPlugin", () => {
 
       // Negative depth should be treated as 0 and skip the depth option
       expect(mockSpawn).toHaveBeenCalledWith({
-        cmd: ["git", "clone", "https://github.com/user/repo.git", tempDir],
+        cmd: ["git", "clone", "--recurse-submodules", "https://github.com/user/repo.git", tempDir],
         stdout: "pipe",
         stderr: "pipe"
       })

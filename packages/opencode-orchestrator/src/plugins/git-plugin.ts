@@ -37,8 +37,8 @@ export class GitPlugin implements ProjectPlugin {
       }
     }
 
-    // Warn about shallow cloning
-    if (!input.config?.depth || input.config.depth === 1) {
+    // Warn about shallow cloning when explicitly requested
+    if (input.config?.depth && input.config.depth === 1) {
       warnings.push("Using shallow clone (depth=1). Full history will not be available.")
     }
 
@@ -68,14 +68,14 @@ export class GitPlugin implements ProjectPlugin {
     gitUrl: string,
     targetPath: string,
     branch?: string,
-    depth: number = 1,
-    recursive: boolean = false
+    depth?: number,
+    recursive: boolean = true
   ): Promise<void> {
     try {
       const args = ["git", "clone"]
       
-      // Add depth option for shallow cloning
-      if (depth > 0) {
+      // Add depth option only if explicitly specified
+      if (depth && depth > 0) {
         args.push("--depth", depth.toString())
       }
       
@@ -84,10 +84,8 @@ export class GitPlugin implements ProjectPlugin {
         args.push("--branch", branch)
       }
       
-      // Add recursive option for submodules
-      if (recursive) {
-        args.push("--recursive")
-      }
+      // Always clone submodules recursively
+      args.push("--recurse-submodules")
       
       args.push(gitUrl, targetPath)
 
