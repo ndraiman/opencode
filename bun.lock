@@ -63,19 +63,17 @@
     },
     "packages/opencode-orchestrator": {
       "name": "@opencode/orchestrator",
-      "version": "0.0.1",
+      "version": "0.1.0",
+      "bin": {
+        "opencode-orchestrator": "dist/index.js",
+      },
       "dependencies": {
-        "@hono/zod-validator": "0.5.0",
-        "hono": "4.7.10",
-        "hono-openapi": "0.4.8",
-        "remeda": "2.22.3",
-        "zod": "catalog:",
-        "zod-openapi": "4.2.4",
-        "zod-validation-error": "3.5.2",
+        "hono": "^4.0.0",
+        "zod": "^3.22.0",
       },
       "devDependencies": {
-        "@types/node": "catalog:",
-        "typescript": "catalog:",
+        "@types/bun": "latest",
+        "typescript": "^5.0.0",
       },
     },
     "packages/web": {
