@@ -1,45 +1,23 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test"
-import { mkdir, rm, chmod, writeFile } from "node:fs/promises"
+import { mkdir, writeFile, chmod } from "node:fs/promises"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 import { ProjectManager } from "../src/project-manager.js"
 import type { OrchestratorState, CreateProjectInput } from "../src/types.js"
-
-// Robust cleanup function
-async function cleanupDirectory(dirPath: string): Promise<void> {
-  try {
-    // First, try to make everything writable
-    try {
-      await chmod(dirPath, 0o777)
-    } catch (e) {
-      // Ignore chmod errors
-    }
-
-    // Try to remove recursively
-    await rm(dirPath, { recursive: true, force: true })
-  } catch (e) {
-    // If that fails, try a second time after a short delay
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 100))
-      await rm(dirPath, { recursive: true, force: true })
-    } catch (e) {
-      // Ignore final cleanup errors in tests
-    }
-  }
-}
-
-// Test timeout helper
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(
-        () => reject(new Error(`Operation timed out after ${ms}ms`)),
-        ms,
-      ),
-    ),
-  ])
-}
+import {
+  cleanupDirectory,
+  withTimeout,
+  createProjectManagerOverride,
+  measurePerformance,
+  retry,
+  waitFor,
+} from "./helpers/test-utils.js"
+import {
+  TestProjectFactory,
+  TestStateFactory,
+  TestWorkspaceFactory,
+} from "./helpers/test-factories.js"
+import { getTestConfig, TEST_TIMEOUTS } from "./helpers/test-config.js"
 
 // Helper to override startProject for integration tests
 function overrideStartProject(
@@ -117,14 +95,14 @@ describe("ProjectManager Integration Tests", () => {
   let projectManager: ProjectManager
   let tempWorkspace: string
   let testExecutable: string
+  const testConfig = getTestConfig("integration")
 
   beforeEach(async () => {
-    state = {
-      projects: new Map(),
-      processes: new Map(),
-    }
+    // Use factory for consistent state setup
+    state = TestStateFactory.empty()
 
-    tempWorkspace = join(tmpdir(), `opencode-integration-test-${Date.now()}`)
+    // Use factory for workspace creation
+    tempWorkspace = TestWorkspaceFactory.create("integration-test")
     await mkdir(tempWorkspace, { recursive: true })
 
     // Create a test executable that behaves like a simple server
@@ -189,80 +167,113 @@ try {
   })
 
   describe("Real Process Spawning", () => {
-    test("should spawn and manage a real process", async () => {
-      // Create a project to test with
-      const input: CreateProjectInput = {
-        name: "real-process-test",
-        type: "empty",
-        description: "Integration test project",
-      }
-      const project = await projectManager.createProject(input)
+    test(
+      "should spawn and manage a real process",
+      async () => {
+        // Use factory for consistent test data
+        const input = TestProjectFactory.empty({
+          name: "real-process-test",
+          description: "Integration test project",
+        })
+        const project = await projectManager.createProject(input)
 
-      // Override startProject to use our test executable
-      const originalStartProject = overrideStartProject(projectManager, state, [
-        process.execPath,
-        testExecutable,
-      ])
+        // Use the improved override helper
+        const override = createProjectManagerOverride(projectManager, state, [
+          process.execPath,
+          testExecutable,
+        ])
 
-      try {
-        // Start the project - this will spawn a real process
-        await withTimeout(projectManager.startProject(project.id), 10000)
+        try {
+          // Start the project with performance measurement
+          const { duration } = await measurePerformance(async () => {
+            await projectManager.startProject(project.id)
+          }, testConfig.performance.threshold)
 
-        // Verify process is running
-        const updatedProject = state.projects.get(project.id)
-        expect(updatedProject?.status).toBe("running")
-        expect(updatedProject?.port).toBeGreaterThan(0)
-        expect(updatedProject?.pid).toBeDefined()
+          // Verify process is running
+          const updatedProject = state.projects.get(project.id)
+          expect(updatedProject?.status).toBe("running")
+          expect(updatedProject?.port).toBeGreaterThan(0)
+          expect(updatedProject?.pid).toBeDefined()
 
-        // Verify process info is stored
-        const processInfo = state.processes.get(project.id)
-        expect(processInfo).toBeDefined()
-        expect(processInfo?.process).toBeDefined()
-        expect(processInfo?.port).toBeGreaterThan(0)
-        expect(processInfo?.startedAt).toBeInstanceOf(Date)
+          // Verify process info is stored
+          const processInfo = state.processes.get(project.id)
+          expect(processInfo).toBeDefined()
+          expect(processInfo?.process).toBeDefined()
+          expect(processInfo?.port).toBeGreaterThan(0)
+          expect(processInfo?.startedAt).toBeInstanceOf(Date)
 
-        // Stop the project
-        await withTimeout(projectManager.stopProject(project.id), 5000)
+          console.log(`Process startup took ${duration}ms`)
 
-        // Verify process is stopped
-        const stoppedProject = state.projects.get(project.id)
-        expect(stoppedProject?.status).toBe("stopped")
-        expect(stoppedProject?.port).toBeUndefined()
-        expect(stoppedProject?.pid).toBeUndefined()
-        expect(state.processes.has(project.id)).toBe(false)
-      } finally {
-        // Restore original method
-        projectManager.startProject = originalStartProject
-      }
-    }, 15000)
+          // Stop the project with timeout from config
+          await withTimeout(
+            projectManager.stopProject(project.id),
+            TEST_TIMEOUTS.projectStop,
+          )
 
-    test("should handle process startup failure", async () => {
-      const input: CreateProjectInput = {
-        name: "failing-process-test",
-        type: "empty",
-      }
-      const project = await projectManager.createProject(input)
+          // Verify process is stopped
+          const stoppedProject = state.projects.get(project.id)
+          expect(stoppedProject?.status).toBe("stopped")
+          expect(stoppedProject?.port).toBeUndefined()
+          expect(stoppedProject?.pid).toBeUndefined()
+          expect(state.processes.has(project.id)).toBe(false)
+        } finally {
+          // Restore original method
+          override.restore()
+        }
+      },
+      TEST_TIMEOUTS.projectStart,
+    )
 
-      // Override to use a non-existent executable
-      const originalStartProject = overrideStartProject(projectManager, state, [
-        "/non/existent/executable",
-        "serve",
-        "--port",
-      ])
+    test(
+      "should handle process startup failure with retry",
+      async () => {
+        // Use factory for test data
+        const input = TestProjectFactory.empty({
+          name: "failing-process-test",
+        })
+        const project = await projectManager.createProject(input)
 
-      try {
-        await expect(
-          withTimeout(projectManager.startProject(project.id), 10000),
-        ).rejects.toThrow()
+        // Override to use a non-existent executable
+        const override = createProjectManagerOverride(projectManager, state, [
+          "/non/existent/executable",
+          "serve",
+          "--port",
+        ])
 
-        const failedProject = state.projects.get(project.id)
-        expect(failedProject?.status).toBe("failed")
-        expect(failedProject?.lastError).toBeDefined()
-        expect(state.processes.has(project.id)).toBe(false)
-      } finally {
-        projectManager.startProject = originalStartProject
-      }
-    }, 10000)
+        try {
+          // Test with retry mechanism for robustness
+          await expect(
+            retry(
+              async () => {
+                await withTimeout(
+                  projectManager.startProject(project.id),
+                  TEST_TIMEOUTS.projectStart,
+                )
+              },
+              { maxAttempts: 2, delay: 100 },
+            ),
+          ).rejects.toThrow()
+
+          // Wait for state to be updated
+          await waitFor(
+            () => {
+              const failedProj = state.projects.get(project.id)
+              return failedProj?.status === "failed"
+            },
+            { timeout: 2000 },
+          )
+
+          const failedProject = state.projects.get(project.id)
+          expect(failedProject?.status).toBe("failed")
+          expect(failedProject?.lastError).toBeDefined()
+          expect(failedProject?.lastError).toContain("ENOENT")
+          expect(state.processes.has(project.id)).toBe(false)
+        } finally {
+          override.restore()
+        }
+      },
+      TEST_TIMEOUTS.projectStart,
+    )
 
     test("should collect real process logs", async () => {
       const input: CreateProjectInput = {
