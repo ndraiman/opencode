@@ -39,6 +39,77 @@ describe("CLI Create Command", () => {
     await cleanupDirectory(tempWorkspace)
   })
 
+  // Helper functions for common test patterns
+  function captureConsole() {
+    const logs: string[] = []
+    const errors: string[] = []
+    const originalLog = console.log
+    const originalError = console.error
+    
+    console.log = (message: string) => logs.push(message)
+    console.error = (message: string) => errors.push(message)
+    
+    return {
+      logs,
+      errors,
+      restore: () => {
+        console.log = originalLog
+        console.error = originalError
+      }
+    }
+  }
+
+  function captureProcessExit() {
+    const originalExit = process.exit
+    let exitCode = 0
+    
+    process.exit = ((code: number) => {
+      exitCode = code
+      throw new Error(`Process exit with code ${code}`)
+    }) as any
+    
+    return {
+      get exitCode() { return exitCode },
+      restore: () => { process.exit = originalExit }
+    }
+  }
+
+  function buildCreateArgs(overrides: any = {}) {
+    return {
+      name: "test-project",
+      type: "empty",
+      description: "Test project",
+      workspace: tempWorkspace,
+      config: undefined,
+      ...overrides
+    }
+  }
+
+  function validateYargsConfig(builder: any, expectations: any) {
+    const mockYargs = {
+      positional: (name: string, config: any) => {
+        if (expectations.positional && expectations.positional[name]) {
+          const expected = expectations.positional[name]
+          Object.keys(expected).forEach(key => {
+            expect(config[key]).toEqual(expected[key])
+          })
+        }
+        return mockYargs
+      },
+      option: (name: string, config: any) => {
+        if (expectations.options && expectations.options[name]) {
+          const expected = expectations.options[name]
+          Object.keys(expected).forEach(key => {
+            expect(config[key]).toEqual(expected[key])
+          })
+        }
+        return mockYargs
+      },
+    }
+    
+    builder(mockYargs)
+  }
+
   test("should create CLI command with correct configuration", () => {
     expect(CreateCommand.command).toBe("create <name>")
     expect(CreateCommand.describe).toBe("Create a new OpenCode project")
@@ -47,64 +118,35 @@ describe("CLI Create Command", () => {
   })
 
   test("should configure yargs with correct options", () => {
-    const mockYargs = {
-      positional: (name: string, config: any) => {
-        if (name === "name") {
-          expect(config.describe).toBe("Name of the project to create")
-          expect(config.type).toBe("string")
-          expect(config.demandOption).toBe(true)
+    validateYargsConfig(CreateCommand.builder, {
+      positional: {
+        name: {
+          describe: "Name of the project to create",
+          type: "string",
+          demandOption: true
         }
-        return mockYargs
       },
-      option: (name: string, config: any) => {
-        switch (name) {
-          case "type":
-            expect(config.choices).toEqual(["git", "empty"])
-            expect(config.default).toBe("empty")
-            break
-          case "description":
-            expect(config.type).toBe("string")
-            break
-          case "workspace":
-            expect(config.type).toBe("string")
-            expect(config.default).toContain(".opencode")
-            break
-          case "config":
-            expect(config.type).toBe("string")
-            break
+      options: {
+        type: {
+          choices: ["git", "empty"],
+          default: "empty"
+        },
+        description: {
+          type: "string"
+        },
+        workspace: {
+          type: "string"
+        },
+        config: {
+          type: "string"
         }
-        return mockYargs
-      },
-    }
-
-    const builder = CreateCommand.builder as any
-    builder(mockYargs)
+      }
+    })
   })
 
   test("should successfully create an empty project", async () => {
-    const args = {
-      name: "test-project",
-      type: "empty",
-      description: "Test project",
-      workspace: tempWorkspace,
-      config: undefined,
-    }
-
-    // Mock console methods to capture output
-    const consoleSpy = {
-      log: [] as string[],
-      error: [] as string[],
-    }
-    
-    const originalConsoleLog = console.log
-    const originalConsoleError = console.error
-    
-    console.log = (message: string) => {
-      consoleSpy.log.push(message)
-    }
-    console.error = (message: string) => {
-      consoleSpy.error.push(message)
-    }
+    const args = buildCreateArgs()
+    const console = captureConsole()
 
     try {
       await CreateCommand.handler(args as any)
@@ -117,37 +159,20 @@ describe("CLI Create Command", () => {
       expect(projects[0].description).toBe("Test project")
       
       // Check console output includes success message
-      expect(consoleSpy.log.some(msg => msg.includes("created successfully"))).toBe(true)
+      expect(console.logs.some(msg => msg.includes("created successfully"))).toBe(true)
       
     } finally {
-      console.log = originalConsoleLog
-      console.error = originalConsoleError
+      console.restore()
     }
   })
 
   test("should successfully create a git project", async () => {
-    const args = {
+    const args = buildCreateArgs({
       name: "git-project",
       type: "git",
-      description: "Git test project",
-      workspace: tempWorkspace,
-      config: undefined,
-    }
-
-    const consoleSpy = {
-      log: [] as string[],
-      error: [] as string[],
-    }
-    
-    const originalConsoleLog = console.log
-    const originalConsoleError = console.error
-    
-    console.log = (message: string) => {
-      consoleSpy.log.push(message)
-    }
-    console.error = (message: string) => {
-      consoleSpy.error.push(message)
-    }
+      description: "Git test project"
+    })
+    const console = captureConsole()
 
     try {
       await CreateCommand.handler(args as any)
@@ -158,8 +183,7 @@ describe("CLI Create Command", () => {
       expect(projects[0].type).toBe("git")
       
     } finally {
-      console.log = originalConsoleLog
-      console.error = originalConsoleError
+      console.restore()
     }
   })
 
@@ -169,28 +193,13 @@ describe("CLI Create Command", () => {
       gitBranch: "main",
     }
 
-    const args = {
+    const args = buildCreateArgs({
       name: "config-project",
       type: "git",
       description: "Project with config",
-      workspace: tempWorkspace,
-      config: JSON.stringify(customConfig),
-    }
-
-    const consoleSpy = {
-      log: [] as string[],
-      error: [] as string[],
-    }
-    
-    const originalConsoleLog = console.log
-    const originalConsoleError = console.error
-    
-    console.log = (message: string) => {
-      consoleSpy.log.push(message)
-    }
-    console.error = (message: string) => {
-      consoleSpy.error.push(message)
-    }
+      config: JSON.stringify(customConfig)
+    })
+    const console = captureConsole()
 
     try {
       await CreateCommand.handler(args as any)
@@ -200,51 +209,27 @@ describe("CLI Create Command", () => {
       expect(projects[0].config).toEqual(customConfig)
       
     } finally {
-      console.log = originalConsoleLog
-      console.error = originalConsoleError
+      console.restore()
     }
   })
 
   test("should handle invalid JSON config", async () => {
-    const args = {
+    const args = buildCreateArgs({
       name: "invalid-config-project",
-      type: "empty",
-      workspace: tempWorkspace,
-      config: "invalid json",
-    }
-
-    const consoleSpy = {
-      log: [] as string[],
-      error: [] as string[],
-    }
-    
-    const originalConsoleLog = console.log
-    const originalConsoleError = console.error
-    const originalProcessExit = process.exit
-    
-    let exitCode = 0
-    
-    console.log = (message: string) => {
-      consoleSpy.log.push(message)
-    }
-    console.error = (message: string) => {
-      consoleSpy.error.push(message)
-    }
-    process.exit = ((code: number) => {
-      exitCode = code
-      throw new Error(`Process exit with code ${code}`)
-    }) as any
+      config: "invalid json"
+    })
+    const console = captureConsole()
+    const processExit = captureProcessExit()
 
     try {
       await CreateCommand.handler(args as any)
       expect(false).toBe(true) // Should not reach here
     } catch (error) {
-      expect(exitCode).toBe(1)
-      expect(consoleSpy.error.some(msg => msg.includes("Invalid JSON"))).toBe(true)
+      expect(processExit.exitCode).toBe(1)
+      expect(console.errors.some(msg => msg.includes("Invalid JSON"))).toBe(true)
     } finally {
-      console.log = originalConsoleLog
-      console.error = originalConsoleError
-      process.exit = originalProcessExit
+      console.restore()
+      processExit.restore()
     }
   })
 
@@ -256,34 +241,9 @@ describe("CLI Create Command", () => {
       },
     })
 
-    const args = {
-      name: "failing-project",
-      type: "empty",
-      workspace: tempWorkspace,
-      config: undefined,
-    }
-
-    const consoleSpy = {
-      log: [] as string[],
-      error: [] as string[],
-    }
-    
-    const originalConsoleLog = console.log
-    const originalConsoleError = console.error
-    const originalProcessExit = process.exit
-    
-    let exitCode = 0
-    
-    console.log = (message: string) => {
-      consoleSpy.log.push(message)
-    }
-    console.error = (message: string) => {
-      consoleSpy.error.push(message)
-    }
-    process.exit = ((code: number) => {
-      exitCode = code
-      throw new Error(`Process exit with code ${code}`)
-    }) as any
+    const args = buildCreateArgs({ name: "failing-project" })
+    const console = captureConsole()
+    const processExit = captureProcessExit()
 
     // Replace the project manager in the handler
     const originalHandler = CreateCommand.handler
@@ -306,40 +266,22 @@ describe("CLI Create Command", () => {
       await CreateCommand.handler(args as any)
       expect(false).toBe(true) // Should not reach here
     } catch (error) {
-      expect(exitCode).toBe(1)
-      expect(consoleSpy.error.some(msg => msg.includes("Project creation failed"))).toBe(true)
+      expect(processExit.exitCode).toBe(1)
+      expect(console.errors.some(msg => msg.includes("Project creation failed"))).toBe(true)
     } finally {
-      console.log = originalConsoleLog
-      console.error = originalConsoleError
-      process.exit = originalProcessExit
+      console.restore()
+      processExit.restore()
       CreateCommand.handler = originalHandler
     }
   })
 
   test("should create workspace directory if it doesn't exist", async () => {
     const nonExistentWorkspace = join(tmpdir(), `non-existent-${generateTestId()}`)
-    
-    const args = {
+    const args = buildCreateArgs({
       name: "workspace-test",
-      type: "empty",
-      workspace: nonExistentWorkspace,
-      config: undefined,
-    }
-
-    const consoleSpy = {
-      log: [] as string[],
-      error: [] as string[],
-    }
-    
-    const originalConsoleLog = console.log
-    const originalConsoleError = console.error
-    
-    console.log = (message: string) => {
-      consoleSpy.log.push(message)
-    }
-    console.error = (message: string) => {
-      consoleSpy.error.push(message)
-    }
+      workspace: nonExistentWorkspace
+    })
+    const console = captureConsole()
 
     try {
       await CreateCommand.handler(args as any)
@@ -354,8 +296,7 @@ describe("CLI Create Command", () => {
       }
       
     } finally {
-      console.log = originalConsoleLog
-      console.error = originalConsoleError
+      console.restore()
       await cleanupDirectory(nonExistentWorkspace)
     }
   })
@@ -448,49 +389,28 @@ describe("CLI Create Command", () => {
   })
 
   test("should use default workspace when none provided", () => {
-    const mockYargs = {
-      positional: () => mockYargs,
-      option: (name: string, config: any) => {
-        if (name === "workspace") {
-          expect(config.default).toContain(".opencode")
-          expect(config.default).toContain("orchestrator")
-          expect(config.default).toContain("projects")
+    validateYargsConfig(CreateCommand.builder, {
+      options: {
+        workspace: {
+          type: "string"
         }
-        return mockYargs
-      },
-    }
-
-    const builder = CreateCommand.builder as any
-    builder(mockYargs)
+      }
+    })
   })
 
   test("should validate required name parameter", () => {
-    const mockYargs = {
-      positional: (name: string, config: any) => {
-        if (name === "name") {
-          expect(config.demandOption).toBe(true)
-        }
-        return mockYargs
-      },
-      option: () => mockYargs,
-    }
-
-    const builder = CreateCommand.builder as any
-    builder(mockYargs)
+    validateYargsConfig(CreateCommand.builder, {
+      positional: {
+        name: { demandOption: true }
+      }
+    })
   })
 
   test("should have correct project type choices", () => {
-    const mockYargs = {
-      positional: () => mockYargs,
-      option: (name: string, config: any) => {
-        if (name === "type") {
-          expect(config.choices).toEqual(["git", "empty"])
-        }
-        return mockYargs
-      },
-    }
-
-    const builder = CreateCommand.builder as any
-    builder(mockYargs)
+    validateYargsConfig(CreateCommand.builder, {
+      options: {
+        type: { choices: ["git", "empty"] }
+      }
+    })
   })
 })

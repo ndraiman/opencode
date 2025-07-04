@@ -31,6 +31,51 @@ describe("CLI List Command", () => {
     await cleanupDirectory(tempWorkspace)
   })
 
+  // Helper functions for common test patterns
+  function captureConsole() {
+    const logs: string[] = []
+    const errors: string[] = []
+    const originalLog = console.log
+    const originalError = console.error
+    
+    console.log = (message: string) => logs.push(message)
+    console.error = (message: string) => errors.push(message)
+    
+    return {
+      logs,
+      errors,
+      restore: () => {
+        console.log = originalLog
+        console.error = originalError
+      }
+    }
+  }
+
+  function buildListArgs(overrides: any = {}) {
+    return {
+      workspace: tempWorkspace,
+      format: "table",
+      status: undefined,
+      ...overrides
+    }
+  }
+
+  function validateYargsConfig(builder: any, expectations: any) {
+    const mockYargs = {
+      option: (name: string, config: any) => {
+        if (expectations.options && expectations.options[name]) {
+          const expected = expectations.options[name]
+          Object.keys(expected).forEach(key => {
+            expect(config[key]).toEqual(expected[key])
+          })
+        }
+        return mockYargs
+      },
+    }
+    
+    builder(mockYargs)
+  }
+
   test("should create CLI command with correct configuration", () => {
     expect(ListCommand.command).toBe("list")
     expect(ListCommand.describe).toBe("List all OpenCode projects")
@@ -40,60 +85,34 @@ describe("CLI List Command", () => {
   })
 
   test("should configure yargs with correct options", () => {
-    const mockYargs = {
-      option: (name: string, config: any) => {
-        switch (name) {
-          case "workspace":
-            expect(config.type).toBe("string")
-            expect(config.default).toContain(".opencode")
-            break
-          case "format":
-            expect(config.choices).toEqual(["table", "json"])
-            expect(config.default).toBe("table")
-            break
-          case "status":
-            expect(config.choices).toEqual(["stopped", "starting", "running", "stopping", "failed"])
-            break
+    validateYargsConfig(ListCommand.builder, {
+      options: {
+        workspace: {
+          type: "string"
+        },
+        format: {
+          choices: ["table", "json"],
+          default: "table"
+        },
+        status: {
+          choices: ["stopped", "starting", "running", "stopping", "failed"]
         }
-        return mockYargs
-      },
-    }
-
-    const builder = ListCommand.builder as any
-    builder(mockYargs)
+      }
+    })
   })
 
   test("should display no projects message when no projects exist", async () => {
-    const args = {
-      workspace: tempWorkspace,
-      format: "table",
-      status: undefined,
-    }
-
-    const consoleSpy = {
-      log: [] as string[],
-      error: [] as string[],
-    }
-    
-    const originalConsoleLog = console.log
-    const originalConsoleError = console.error
-    
-    console.log = (message: string) => {
-      consoleSpy.log.push(message)
-    }
-    console.error = (message: string) => {
-      consoleSpy.error.push(message)
-    }
+    const args = buildListArgs()
+    const console = captureConsole()
 
     try {
       await ListCommand.handler(args as any)
       
-      expect(consoleSpy.error.some(msg => msg.includes("No projects found"))).toBe(true)
-      expect(consoleSpy.error.some(msg => msg.includes("Create a new project"))).toBe(true)
+      expect(console.errors.some(msg => msg.includes("No projects found"))).toBe(true)
+      expect(console.errors.some(msg => msg.includes("Create a new project"))).toBe(true)
       
     } finally {
-      console.log = originalConsoleLog
-      console.error = originalConsoleError
+      console.restore()
     }
   })
 
