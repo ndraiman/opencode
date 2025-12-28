@@ -1,6 +1,6 @@
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
-import { TextAttributes } from "@opentui/core"
+import { TextAttributes, type MouseEvent } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
 import { Installation } from "@/installation"
@@ -575,11 +575,83 @@ function App() {
     })
   })
 
+  // Double-click detection state
+  let lastClickTime = 0
+  let lastClickX = -1
+  let lastClickY = -1
+  const DOUBLE_CLICK_THRESHOLD = 400 // ms
+
+  // Check if a character is a word character (alphanumeric, underscore, or common code chars)
+  const isWordChar = (charCode: number): boolean => {
+    if (charCode === 0 || charCode === 32) return false // null or space
+    const char = String.fromCodePoint(charCode)
+    // Word characters: letters, digits, underscore, hyphen, and common programming chars
+    return /[\w\-]/.test(char)
+  }
+
+  // Find word boundaries at a given position in the render buffer
+  const findWordBoundaries = (x: number, y: number): { startX: number; endX: number } | null => {
+    const buffer = renderer.currentRenderBuffer
+    const width = buffer.width
+    const charBuffer = buffer.buffers.char
+
+    // Get the character at the click position
+    const index = y * width + x
+    if (index < 0 || index >= charBuffer.length) return null
+
+    const clickedChar = charBuffer[index]
+    if (!isWordChar(clickedChar)) return null
+
+    // Find start of word (scan left)
+    let startX = x
+    while (startX > 0) {
+      const prevIndex = y * width + (startX - 1)
+      if (!isWordChar(charBuffer[prevIndex])) break
+      startX--
+    }
+
+    // Find end of word (scan right)
+    let endX = x
+    while (endX < width - 1) {
+      const nextIndex = y * width + (endX + 1)
+      if (!isWordChar(charBuffer[nextIndex])) break
+      endX++
+    }
+
+    return { startX, endX }
+  }
+
+  const handleMouseDown = (evt: MouseEvent) => {
+    if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+
+    const now = Date.now()
+    const isDoubleClick = now - lastClickTime < DOUBLE_CLICK_THRESHOLD && evt.x === lastClickX && evt.y === lastClickY
+
+    if (isDoubleClick && evt.target) {
+      // Find word boundaries at click position
+      const boundaries = findWordBoundaries(evt.x, evt.y)
+      if (boundaries) {
+        // Create selection for the word using the same APIs as drag selection
+        renderer.startSelection(evt.target, boundaries.startX, evt.y)
+        renderer.updateSelection(evt.target, boundaries.endX + 1, evt.y)
+      }
+      // Reset to prevent triple-click being detected as another double-click
+      lastClickTime = 0
+      lastClickX = -1
+      lastClickY = -1
+    } else {
+      lastClickTime = now
+      lastClickX = evt.x
+      lastClickY = evt.y
+    }
+  }
+
   return (
     <box
       width={dimensions().width}
       height={dimensions().height}
       backgroundColor={theme.background}
+      onMouseDown={handleMouseDown}
       onMouseUp={async () => {
         if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) {
           renderer.clearSelection()
