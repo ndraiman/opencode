@@ -593,7 +593,8 @@ function App() {
     const buffer = renderer.currentRenderBuffer
     const width = buffer.width
     const chars = buffer.buffers.char
-    const idx = evt.y * width + evt.x
+    const row = evt.y * width
+    const idx = row + evt.x
 
     if (idx < 0 || idx >= chars.length) return
 
@@ -606,10 +607,10 @@ function App() {
     if (!isWordChar(idx)) return
 
     let start = evt.x
-    while (start > 0 && isWordChar(evt.y * width + start - 1)) start--
+    while (start > 0 && isWordChar(row + start - 1)) start--
 
     let end = evt.x
-    while (end < width - 1 && isWordChar(evt.y * width + end + 1)) end++
+    while (end < width - 1 && isWordChar(row + end + 1)) end++
 
     renderer.startSelection(evt.target, start, evt.y)
     renderer.updateSelection(evt.target, end + 1, evt.y)
