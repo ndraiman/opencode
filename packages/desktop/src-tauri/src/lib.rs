@@ -25,7 +25,7 @@ use std::{
 use tauri::{
     AppHandle, Listener, Manager, RunEvent, State, WindowEvent,
     ipc::Channel,
-    menu::{MenuBuilder, MenuItemBuilder},
+    menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
@@ -75,6 +75,12 @@ struct SidecarReady(futures::future::Shared<oneshot::Receiver<ServerReadyData>>)
 
 /// Pre-authenticated browser URL for the sidecar server.
 struct BrowserUrl(Arc<Mutex<Option<String>>>);
+
+/// Server credentials for display in tray submenu.
+struct ServerCredentials {
+    password: Arc<Mutex<Option<String>>>,
+    password_visible: Arc<Mutex<bool>>,
+}
 
 #[tauri::command]
 #[specta::specta]
@@ -357,6 +363,10 @@ pub fn run() {
             handle.manage(logging::init(&log_dir));
 
             handle.manage(BrowserUrl(Arc::new(Mutex::new(None))));
+            handle.manage(ServerCredentials {
+                password: Arc::new(Mutex::new(None)),
+                password_visible: Arc::new(Mutex::new(false)),
+            });
 
             if let Err(e) = setup_tray(&handle) {
                 tracing::error!("Failed to setup tray icon: {e}");
@@ -442,18 +452,35 @@ struct LoadingWindowComplete;
 const TRAY_SHOW: &str = "show";
 const TRAY_BROWSER: &str = "browser";
 const TRAY_COPY_URL: &str = "copy_url";
+const TRAY_TOGGLE_PASS: &str = "toggle_pass";
+const TRAY_COPY_CREDS: &str = "copy_creds";
 const TRAY_QUIT: &str = "quit";
 
 fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let show = MenuItemBuilder::with_id(TRAY_SHOW, "Show App").build(app)?;
     let browser = MenuItemBuilder::with_id(TRAY_BROWSER, "Open in Browser").build(app)?;
     let copy_url = MenuItemBuilder::with_id(TRAY_COPY_URL, "Copy Browser URL").build(app)?;
+
+    let username_label = MenuItemBuilder::new("Username: opencode").enabled(false).build(app)?;
+    let password_label = MenuItemBuilder::with_id("password_label", "Password: ••••••••").enabled(false).build(app)?;
+    let toggle_pass = MenuItemBuilder::with_id(TRAY_TOGGLE_PASS, "Show Password").build(app)?;
+    let copy_creds = MenuItemBuilder::with_id(TRAY_COPY_CREDS, "Copy Credentials").build(app)?;
+
+    let server_info = SubmenuBuilder::with_id(app, "server_info", "Server Info")
+        .item(&username_label)
+        .item(&password_label)
+        .separator()
+        .item(&toggle_pass)
+        .item(&copy_creds)
+        .build()?;
+
     let quit = MenuItemBuilder::with_id(TRAY_QUIT, "Quit").build(app)?;
 
     let menu = MenuBuilder::new(app)
         .item(&show)
         .item(&browser)
         .item(&copy_url)
+        .item(&server_info)
         .separator()
         .item(&quit)
         .build()?;
@@ -462,6 +489,9 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .default_window_icon()
         .cloned()
         .ok_or("No default window icon configured")?;
+
+    let password_label_item = password_label.clone();
+    let toggle_pass_item = toggle_pass.clone();
 
     TrayIconBuilder::new()
         .icon(icon)
@@ -486,6 +516,29 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                     if let Some(url) = state.0.lock().unwrap().as_ref() {
                         use tauri_plugin_clipboard_manager::ClipboardExt;
                         let _ = app.clipboard().write_text(url);
+                    }
+                }
+            }
+            TRAY_TOGGLE_PASS => {
+                if let Some(creds) = app.try_state::<ServerCredentials>() {
+                    let mut visible = creds.password_visible.lock().unwrap();
+                    *visible = !*visible;
+                    if let Some(pass) = creds.password.lock().unwrap().as_ref() {
+                        let label = if *visible {
+                            format!("Password: {pass}")
+                        } else {
+                            "Password: ••••••••".to_string()
+                        };
+                        let _ = password_label_item.set_text(&label);
+                        let _ = toggle_pass_item.set_text(if *visible { "Hide Password" } else { "Show Password" });
+                    }
+                }
+            }
+            TRAY_COPY_CREDS => {
+                if let Some(creds) = app.try_state::<ServerCredentials>() {
+                    if let Some(pass) = creds.password.lock().unwrap().as_ref() {
+                        use tauri_plugin_clipboard_manager::ClipboardExt;
+                        let _ = app.clipboard().write_text(format!("Username: opencode\nPassword: {pass}"));
                     }
                 }
             }
@@ -539,6 +592,11 @@ async fn initialize(app: AppHandle) {
     // Set browser launch URL with one-time token for cookie-based auth
     if let Some(state) = app.try_state::<BrowserUrl>() {
         *state.0.lock().unwrap() = Some(format!("http://{hostname}:{port}/-/launch?token={launch_token}"));
+    }
+
+    // Store password for tray submenu display
+    if let Some(creds) = app.try_state::<ServerCredentials>() {
+        *creds.password.lock().unwrap() = Some(password.clone());
     }
 
     // Make sidecar credentials available immediately (before health check completes)

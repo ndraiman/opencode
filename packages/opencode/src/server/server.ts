@@ -1,3 +1,4 @@
+import crypto from "crypto"
 import { Log } from "../util/log"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
@@ -41,7 +42,18 @@ export namespace Server {
     if (method === "POST" && /\/session\/[^/]+\/(message|prompt_async)$/.test(path)) return true
     return false
   }
-  const validSessions = new Set<string>()
+
+  function signSession(nonce: string, secret: string): string {
+    const hmac = crypto.createHmac("sha256", secret).update(nonce).digest("hex")
+    return `${nonce}.${hmac}`
+  }
+
+  function verifySession(cookie: string, secret: string): boolean {
+    const dot = cookie.indexOf(".")
+    if (dot === -1) return false
+    const nonce = cookie.slice(0, dot)
+    return cookie === signSession(nonce, secret)
+  }
 
   export const Default = lazy(() => create({}).app)
 
@@ -53,9 +65,11 @@ export namespace Server {
         if (!token) return c.text("Forbidden", 403)
         const provided = new URL(c.req.url).searchParams.get("token")
         if (provided !== token) return c.text("Forbidden", 403)
-        const sessionId = crypto.randomUUID()
-        validSessions.add(sessionId)
-        c.header("Set-Cookie", `opencode_session=${sessionId}; HttpOnly; SameSite=Strict; Path=/`)
+        const password = Flag.OPENCODE_SERVER_PASSWORD
+        if (!password) return c.text("Forbidden", 403)
+        const signed = signSession(crypto.randomUUID(), password)
+        const maxAge = 365 * 24 * 60 * 60 // 1 year
+        c.header("Set-Cookie", `opencode_session=${signed}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}`)
         c.header("Cache-Control", "no-store")
         return c.redirect("/", 302)
       })
@@ -63,10 +77,10 @@ export namespace Server {
         if (c.req.method === "OPTIONS") return next()
         const password = Flag.OPENCODE_SERVER_PASSWORD
         if (!password) return next()
-        // Allow browser sessions authenticated via launch token
+        // Allow browser sessions authenticated via HMAC-signed cookie
         const cookieHeader = c.req.header("Cookie") ?? ""
         const sessionMatch = cookieHeader.match(/opencode_session=([^;]+)/)
-        if (sessionMatch && validSessions.has(sessionMatch[1])) return next()
+        if (sessionMatch && verifySession(sessionMatch[1], password)) return next()
         const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
         return basicAuth({ username, password })(c, next)
       })
