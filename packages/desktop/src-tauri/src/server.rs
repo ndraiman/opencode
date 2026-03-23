@@ -7,7 +7,7 @@ use tokio::task::JoinHandle;
 use crate::{
     cli,
     cli::CommandChild,
-    constants::{DEFAULT_SERVER_URL_KEY, SERVER_PORT_KEY, SETTINGS_STORE, WSL_ENABLED_KEY},
+    constants::{DEFAULT_SERVER_URL_KEY, SERVER_PASSWORD_KEY, SERVER_PORT_KEY, SETTINGS_STORE, WSL_ENABLED_KEY},
 };
 
 #[derive(Clone, serde::Serialize, serde::Deserialize, specta::Type, Debug, Default)]
@@ -87,6 +87,49 @@ pub async fn set_server_port(app: AppHandle, port: Option<u32>) -> Result<(), St
         .map_err(|e| format!("Failed to save settings: {}", e))?;
 
     Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_server_password(app: AppHandle) -> Result<Option<String>, String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+
+    let value = store.get(SERVER_PASSWORD_KEY);
+    match value {
+        Some(v) => Ok(v.as_str().map(String::from)),
+        None => Ok(None),
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn set_server_password(app: AppHandle, password: Option<String>) -> Result<(), String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+
+    match password {
+        Some(p) => {
+            store.set(SERVER_PASSWORD_KEY, serde_json::Value::String(p));
+        }
+        None => {
+            store.delete(SERVER_PASSWORD_KEY);
+        }
+    }
+
+    store
+        .save()
+        .map_err(|e| format!("Failed to save settings: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn generate_passphrase() -> String {
+    crate::generate_passphrase()
 }
 
 #[tauri::command]

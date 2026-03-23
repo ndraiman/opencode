@@ -575,16 +575,52 @@ export const SettingsGeneral: Component = () => {
         <Show when={platform.platform === "desktop" && platform.getServerPort}>
           {(_) => {
             const [portResource] = createResource(() => platform.getServerPort?.())
+            const [passResource] = createResource(() => platform.getServerPassword?.())
             const currentPort = () => (portResource.state === "pending" ? undefined : portResource.latest)
+            const currentPass = () => (passResource.state === "pending" ? undefined : passResource.latest)
             const [portInput, setPortInput] = createSignal("")
-            const [initialized, setInitialized] = createSignal(false)
+            const [passInput, setPassInput] = createSignal("")
+            const [portInit, setPortInit] = createSignal(false)
+            const [passInit, setPassInit] = createSignal(false)
 
-            const effectiveInput = () => {
-              if (!initialized() && currentPort() !== undefined) {
+            const effectivePort = () => {
+              if (!portInit() && currentPort() !== undefined) {
                 setPortInput(currentPort() != null ? String(currentPort()) : "")
-                setInitialized(true)
+                setPortInit(true)
               }
               return portInput()
+            }
+
+            const effectivePass = () => {
+              if (!passInit() && currentPass() !== undefined) {
+                setPassInput(currentPass() ?? "")
+                setPassInit(true)
+              }
+              return passInput()
+            }
+
+            const [showPass, setShowPass] = createSignal(false)
+
+            const randomize = async () => {
+              const phrase = await platform.generatePassphrase?.()
+              if (phrase) setPassInput(phrase)
+            }
+
+            const saveAndRestart = async () => {
+              const portVal = portInput().trim()
+              const port = portVal === "" ? null : parseInt(portVal, 10)
+              if (port !== null && (isNaN(port) || port < 1 || port > 65535)) {
+                showToast({
+                  variant: "error",
+                  title: "Invalid port",
+                  description: "Port must be between 1 and 65535",
+                })
+                return
+              }
+              const pass = passInput().trim() || null
+              await platform.setServerPort?.(port)
+              await platform.setServerPassword?.(pass)
+              await platform.restart()
             }
 
             return (
@@ -596,36 +632,47 @@ export const SettingsGeneral: Component = () => {
                     title="Server Port"
                     description="Fixed port for the local server. Leave empty for a random port."
                   >
+                    <input
+                      type="number"
+                      placeholder="(random)"
+                      value={effectivePort()}
+                      onInput={(e) => setPortInput(e.currentTarget.value)}
+                      class="w-24 rounded border border-border-weak-base bg-surface-stronger px-2 py-1 text-13-regular text-text-strong outline-none focus:border-border-strong"
+                    />
+                  </SettingsRow>
+
+                  <SettingsRow
+                    title="Server Password"
+                    description="Password for HTTP basic auth. Leave empty for a random passphrase on each launch."
+                  >
                     <div class="flex items-center gap-2">
-                      <input
-                        type="number"
-                        placeholder="(random)"
-                        value={effectiveInput()}
-                        onInput={(e) => setPortInput(e.currentTarget.value)}
-                        class="w-24 rounded border border-border-weak-base bg-surface-stronger px-2 py-1 text-13-regular text-text-strong outline-none focus:border-border-strong"
-                      />
-                      <Button
-                        size="small"
-                        variant="secondary"
-                        onClick={async () => {
-                          const val = portInput().trim()
-                          const port = val === "" ? null : parseInt(val, 10)
-                          if (port !== null && (isNaN(port) || port < 1 || port > 65535)) {
-                            showToast({
-                              variant: "error",
-                              title: "Invalid port",
-                              description: "Port must be between 1 and 65535",
-                            })
-                            return
-                          }
-                          await platform.setServerPort?.(port)
-                          await platform.restart()
-                        }}
-                      >
-                        Save & Restart
+                      <div class="relative">
+                        <input
+                          type={showPass() ? "text" : "password"}
+                          placeholder="(random on launch)"
+                          value={effectivePass()}
+                          onInput={(e) => setPassInput(e.currentTarget.value)}
+                          class="w-48 rounded border border-border-weak-base bg-surface-stronger px-2 py-1 pr-8 text-13-regular text-text-strong font-mono outline-none focus:border-border-strong"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPass(!showPass())}
+                          class="absolute right-1.5 top-1/2 -translate-y-1/2 text-text-weak hover:text-text-strong"
+                        >
+                          <Icon name="eye" size="small" />
+                        </button>
+                      </div>
+                      <Button size="small" variant="secondary" onClick={randomize}>
+                        Randomize
                       </Button>
                     </div>
                   </SettingsRow>
+
+                  <div class="flex justify-end py-3">
+                    <Button size="small" variant="secondary" onClick={saveAndRestart}>
+                      Save & Restart
+                    </Button>
+                  </div>
                 </SettingsList>
               </div>
             )

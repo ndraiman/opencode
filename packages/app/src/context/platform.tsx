@@ -82,6 +82,15 @@ export type Platform = {
   /** Set the server port (desktop only, requires restart) */
   setServerPort?(port: number | null): Promise<void>
 
+  /** Get the configured server password (desktop only) */
+  getServerPassword?(): Promise<string | null>
+
+  /** Set the server password (desktop only, requires restart) */
+  setServerPassword?(password: string | null): Promise<void>
+
+  /** Generate a random passphrase (desktop only) */
+  generatePassphrase?(): Promise<string>
+
   /** Parse markdown to HTML using native parser (desktop only, returns unprocessed code blocks) */
   parseMarkdown?(markdown: string): Promise<string>
 

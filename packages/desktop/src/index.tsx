@@ -380,6 +380,18 @@ const createPlatform = (): Platform => {
       await commands.setServerPort(port)
     },
 
+    getServerPassword: async () => {
+      return commands.getServerPassword().catch(() => null)
+    },
+
+    setServerPassword: async (password) => {
+      await commands.setServerPassword(password)
+    },
+
+    generatePassphrase: async () => {
+      return commands.generatePassphrase()
+    },
+
     parseMarkdown: (markdown: string) => commands.parseMarkdownCommand(markdown),
 
     webviewZoom,

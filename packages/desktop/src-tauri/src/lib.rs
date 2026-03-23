@@ -415,6 +415,9 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             server::set_default_server_url,
             server::get_server_port,
             server::set_server_port,
+            server::get_server_password,
+            server::set_server_password,
+            server::generate_passphrase,
             server::get_wsl_config,
             server::set_wsl_config,
             get_display_backend,
@@ -456,7 +459,15 @@ const TRAY_BROWSER: &str = "browser";
 const TRAY_COPY_URL: &str = "copy_url";
 const TRAY_TOGGLE_PASS: &str = "toggle_pass";
 const TRAY_COPY_CREDS: &str = "copy_creds";
+const TRAY_REGEN_PASS: &str = "regen_pass";
 const TRAY_QUIT: &str = "quit";
+
+fn generate_passphrase() -> String {
+    (0..4)
+        .map(|_| random_word::get(random_word::Lang::En))
+        .collect::<Vec<_>>()
+        .join("-")
+}
 
 fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let show = MenuItemBuilder::with_id(TRAY_SHOW, "Show App").build(app)?;
@@ -467,6 +478,7 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let password_label = MenuItemBuilder::with_id("password_label", "Password: ••••••••").enabled(false).build(app)?;
     let toggle_pass = MenuItemBuilder::with_id(TRAY_TOGGLE_PASS, "Show Password").build(app)?;
     let copy_creds = MenuItemBuilder::with_id(TRAY_COPY_CREDS, "Copy Credentials").build(app)?;
+    let regen_pass = MenuItemBuilder::with_id(TRAY_REGEN_PASS, "Regenerate Password").build(app)?;
 
     let server_info = SubmenuBuilder::with_id(app, "server_info", "Server Info")
         .item(&username_label)
@@ -474,6 +486,7 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .separator()
         .item(&toggle_pass)
         .item(&copy_creds)
+        .item(&regen_pass)
         .build()?;
 
     let quit = MenuItemBuilder::with_id(TRAY_QUIT, "Quit").build(app)?;
@@ -494,6 +507,8 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 
     let password_label_item = password_label.clone();
     let toggle_pass_item = toggle_pass.clone();
+    let password_label_regen = password_label.clone();
+    let toggle_pass_regen = toggle_pass.clone();
 
     TrayIconBuilder::new()
         .icon(icon)
@@ -544,6 +559,56 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             }
+            TRAY_REGEN_PASS => {
+                let new_password = generate_passphrase();
+                let new_launch_token = uuid::Uuid::new_v4().to_string();
+
+                // Kill existing sidecar
+                kill_sidecar(app.clone());
+
+                // Read stored port
+                let stored_port = {
+                    use tauri_plugin_store::StoreExt;
+                    app.store(crate::constants::SETTINGS_STORE)
+                        .ok()
+                        .and_then(|store| store.get(crate::constants::SERVER_PORT_KEY))
+                        .and_then(|v| v.as_u64())
+                        .map(|n| n as u32)
+                };
+                let port = get_sidecar_port(stored_port);
+                let hostname = "127.0.0.1";
+
+                // Spawn new sidecar with new credentials
+                let (child, _health_check) = server::spawn_local_server(
+                    app.clone(),
+                    hostname.to_string(),
+                    port,
+                    new_password.clone(),
+                    new_launch_token.clone(),
+                );
+
+                // Update server state
+                if let Some(state) = app.try_state::<ServerState>() {
+                    *state.child.lock().unwrap() = Some(child);
+                }
+
+                // Update browser URL
+                if let Some(state) = app.try_state::<BrowserUrl>() {
+                    *state.0.lock().unwrap() = Some(format!("http://{hostname}:{port}/-/launch?token={new_launch_token}"));
+                }
+
+                // Update credentials and reset visibility
+                if let Some(creds) = app.try_state::<ServerCredentials>() {
+                    *creds.password.lock().unwrap() = Some(new_password);
+                    *creds.password_visible.lock().unwrap() = false;
+                }
+
+                // Reset tray labels
+                let _ = password_label_regen.set_text("Password: ••••••••");
+                let _ = toggle_pass_regen.set_text("Show Password");
+
+                tracing::info!("Regenerated server password and restarted sidecar");
+            }
             TRAY_QUIT => {
                 app.exit(0);
             }
@@ -592,7 +657,14 @@ async fn initialize(app: AppHandle) {
     let port = get_sidecar_port(stored_port);
     let hostname = "127.0.0.1";
     let url = format!("http://{hostname}:{port}");
-    let password = uuid::Uuid::new_v4().to_string();
+    let password = {
+        use tauri_plugin_store::StoreExt;
+        app.store(crate::constants::SETTINGS_STORE)
+            .ok()
+            .and_then(|store| store.get(crate::constants::SERVER_PASSWORD_KEY))
+            .and_then(|v| v.as_str().map(String::from))
+            .unwrap_or_else(generate_passphrase)
+    };
     let launch_token = uuid::Uuid::new_v4().to_string();
 
     tracing::info!("Spawning sidecar on {url}");
