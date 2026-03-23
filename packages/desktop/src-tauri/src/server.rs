@@ -1,13 +1,13 @@
 use std::time::{Duration, Instant};
 
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tauri_plugin_store::StoreExt;
 use tokio::task::JoinHandle;
 
 use crate::{
     cli,
     cli::CommandChild,
-    constants::{DEFAULT_SERVER_URL_KEY, SERVER_PASSWORD_KEY, SERVER_PORT_KEY, SETTINGS_STORE, WSL_ENABLED_KEY},
+    constants::{DEFAULT_SERVER_URL_KEY, SERVER_EXTERNAL_HOSTNAME_KEY, SERVER_HOSTNAME_KEY, SERVER_PASSWORD_KEY, SERVER_PORT_KEY, SETTINGS_STORE, WSL_ENABLED_KEY},
 };
 
 #[derive(Clone, serde::Serialize, serde::Deserialize, specta::Type, Debug, Default)]
@@ -130,6 +130,87 @@ pub async fn set_server_password(app: AppHandle, password: Option<String>) -> Re
 #[specta::specta]
 pub fn generate_passphrase() -> String {
     crate::generate_passphrase()
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_browser_url(app: AppHandle) -> Option<String> {
+    app.try_state::<crate::BrowserUrl>()
+        .and_then(|state| state.0.lock().unwrap().clone())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_server_hostname(app: AppHandle) -> Result<Option<String>, String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+
+    let value = store.get(SERVER_HOSTNAME_KEY);
+    match value {
+        Some(v) => Ok(v.as_str().map(String::from)),
+        None => Ok(None),
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn set_server_hostname(app: AppHandle, hostname: Option<String>) -> Result<(), String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+
+    match hostname {
+        Some(h) => {
+            store.set(SERVER_HOSTNAME_KEY, serde_json::Value::String(h));
+        }
+        None => {
+            store.delete(SERVER_HOSTNAME_KEY);
+        }
+    }
+
+    store
+        .save()
+        .map_err(|e| format!("Failed to save settings: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_server_external_hostname(app: AppHandle) -> Result<Option<String>, String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+
+    let value = store.get(SERVER_EXTERNAL_HOSTNAME_KEY);
+    match value {
+        Some(v) => Ok(v.as_str().map(String::from)),
+        None => Ok(None),
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn set_server_external_hostname(app: AppHandle, hostname: Option<String>) -> Result<(), String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+
+    match hostname {
+        Some(h) => {
+            store.set(SERVER_EXTERNAL_HOSTNAME_KEY, serde_json::Value::String(h));
+        }
+        None => {
+            store.delete(SERVER_EXTERNAL_HOSTNAME_KEY);
+        }
+    }
+
+    store
+        .save()
+        .map_err(|e| format!("Failed to save settings: {}", e))?;
+
+    Ok(())
 }
 
 #[tauri::command]

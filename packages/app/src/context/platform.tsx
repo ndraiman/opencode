@@ -82,6 +82,18 @@ export type Platform = {
   /** Set the server port (desktop only, requires restart) */
   setServerPort?(port: number | null): Promise<void>
 
+  /** Get the configured server hostname (desktop only) */
+  getServerHostname?(): Promise<string | null>
+
+  /** Set the server hostname (desktop only, requires restart) */
+  setServerHostname?(hostname: string | null): Promise<void>
+
+  /** Get the configured external hostname for QR/browser URL (desktop only) */
+  getServerExternalHostname?(): Promise<string | null>
+
+  /** Set the external hostname (desktop only, requires restart) */
+  setServerExternalHostname?(hostname: string | null): Promise<void>
+
   /** Get the configured server password (desktop only) */
   getServerPassword?(): Promise<string | null>
 
@@ -90,6 +102,9 @@ export type Platform = {
 
   /** Generate a random passphrase (desktop only) */
   generatePassphrase?(): Promise<string>
+
+  /** Get the browser URL for the local server (desktop only) */
+  getServerBrowserUrl?(): Promise<string | null>
 
   /** Parse markdown to HTML using native parser (desktop only, returns unprocessed code blocks) */
   parseMarkdown?(markdown: string): Promise<string>

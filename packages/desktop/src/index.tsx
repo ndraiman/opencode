@@ -36,6 +36,7 @@ import "./styles.css"
 import { Channel } from "@tauri-apps/api/core"
 import { commands, type InitStep } from "./bindings"
 import { createMenu } from "./menu"
+import { QrPage } from "./qr-page"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -380,6 +381,22 @@ const createPlatform = (): Platform => {
       await commands.setServerPort(port)
     },
 
+    getServerHostname: async () => {
+      return commands.getServerHostname().catch(() => null)
+    },
+
+    setServerHostname: async (hostname) => {
+      await commands.setServerHostname(hostname)
+    },
+
+    getServerExternalHostname: async () => {
+      return commands.getServerExternalHostname().catch(() => null)
+    },
+
+    setServerExternalHostname: async (hostname) => {
+      await commands.setServerExternalHostname(hostname)
+    },
+
     getServerPassword: async () => {
       return commands.getServerPassword().catch(() => null)
     },
@@ -390,6 +407,10 @@ const createPlatform = (): Platform => {
 
     generatePassphrase: async () => {
       return commands.generatePassphrase()
+    },
+
+    getServerBrowserUrl: async () => {
+      return commands.getBrowserUrl().catch(() => null)
     },
 
     parseMarkdown: (markdown: string) => commands.parseMarkdownCommand(markdown),
@@ -497,6 +518,13 @@ render(() => {
       document.removeEventListener("click", handleClick)
     })
   })
+
+  // Standalone QR code page for tray popup
+  if (window.location.pathname === "/qr") {
+    return (
+      <QrPage getUrl={() => commands.getBrowserUrl().catch(() => null)} />
+    )
+  }
 
   return (
     <PlatformProvider value={platform}>

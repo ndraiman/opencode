@@ -74,7 +74,7 @@ struct ServerState {
 struct SidecarReady(futures::future::Shared<oneshot::Receiver<ServerReadyData>>);
 
 /// Pre-authenticated browser URL for the sidecar server.
-struct BrowserUrl(Arc<Mutex<Option<String>>>);
+pub(crate) struct BrowserUrl(pub(crate) Arc<Mutex<Option<String>>>);
 
 /// Server credentials for display in tray submenu.
 struct ServerCredentials {
@@ -422,6 +422,11 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             server::get_server_password,
             server::set_server_password,
             server::generate_passphrase,
+            server::get_browser_url,
+            server::get_server_hostname,
+            server::set_server_hostname,
+            server::get_server_external_hostname,
+            server::set_server_external_hostname,
             server::get_wsl_config,
             server::set_wsl_config,
             get_display_backend,
@@ -463,6 +468,7 @@ const TRAY_BROWSER: &str = "browser";
 const TRAY_COPY_URL: &str = "copy_url";
 const TRAY_TOGGLE_PASS: &str = "toggle_pass";
 const TRAY_COPY_CREDS: &str = "copy_creds";
+const TRAY_QR: &str = "qr";
 const TRAY_QUIT: &str = "quit";
 
 fn generate_passphrase() -> String {
@@ -476,6 +482,7 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let show = MenuItemBuilder::with_id(TRAY_SHOW, "Show App").build(app)?;
     let browser = MenuItemBuilder::with_id(TRAY_BROWSER, "Open in Browser").build(app)?;
     let copy_url = MenuItemBuilder::with_id(TRAY_COPY_URL, "Copy Browser URL").build(app)?;
+    let qr = MenuItemBuilder::with_id(TRAY_QR, "Show QR Code").build(app)?;
 
     let port_label = MenuItemBuilder::with_id("port_label", "Port: ...").enabled(false).build(app)?;
     let username_label = MenuItemBuilder::new("Username: opencode").enabled(false).build(app)?;
@@ -498,6 +505,7 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .item(&show)
         .item(&browser)
         .item(&copy_url)
+        .item(&qr)
         .item(&server_info)
         .separator()
         .item(&quit)
@@ -540,6 +548,23 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                         use tauri_plugin_clipboard_manager::ClipboardExt;
                         let _ = app.clipboard().write_text(url);
                     }
+                }
+            }
+            TRAY_QR => {
+                // Create or focus the QR code window
+                if let Some(window) = app.get_webview_window("qr") {
+                    let _ = window.set_focus();
+                } else {
+                    let _ = tauri::WebviewWindowBuilder::new(
+                        app,
+                        "qr",
+                        tauri::WebviewUrl::App("/qr".into()),
+                    )
+                    .title("QR Code")
+                    .inner_size(350.0, 400.0)
+                    .resizable(false)
+                    .center()
+                    .build();
                 }
             }
             TRAY_TOGGLE_PASS => {
@@ -611,7 +636,14 @@ async fn initialize(app: AppHandle) {
             .map(|n| n as u32)
     };
     let port = get_sidecar_port(stored_port);
-    let hostname = "127.0.0.1";
+    let hostname = {
+        use tauri_plugin_store::StoreExt;
+        app.store(crate::constants::SETTINGS_STORE)
+            .ok()
+            .and_then(|store| store.get(crate::constants::SERVER_HOSTNAME_KEY))
+            .and_then(|v| v.as_str().map(String::from))
+            .unwrap_or_else(|| "127.0.0.1".to_string())
+    };
     let url = format!("http://{hostname}:{port}");
     let password = {
         use tauri_plugin_store::StoreExt;
@@ -637,9 +669,28 @@ async fn initialize(app: AppHandle) {
     let (child, health_check) =
         server::spawn_local_server(app.clone(), hostname.to_string(), port, password.clone(), launch_token.clone());
 
+    // Determine the display hostname for browser URLs
+    // Priority: stored external hostname > auto-detected Mac hostname (if network) > bind hostname
+    let display_hostname = {
+        use tauri_plugin_store::StoreExt;
+        let stored_external = app.store(crate::constants::SETTINGS_STORE)
+            .ok()
+            .and_then(|store| store.get(crate::constants::SERVER_EXTERNAL_HOSTNAME_KEY))
+            .and_then(|v| v.as_str().map(String::from));
+        match stored_external {
+            Some(h) if !h.is_empty() => h,
+            _ if hostname == "0.0.0.0" => {
+                gethostname::gethostname()
+                    .into_string()
+                    .unwrap_or_else(|_| hostname.clone())
+            }
+            _ => hostname.clone(),
+        }
+    };
+
     // Set browser launch URL with one-time token for cookie-based auth
     if let Some(state) = app.try_state::<BrowserUrl>() {
-        *state.0.lock().unwrap() = Some(format!("http://{hostname}:{port}/-/launch?token={launch_token}"));
+        *state.0.lock().unwrap() = Some(format!("http://{display_hostname}:{port}/-/launch?token={launch_token}"));
     }
 
     // Store credentials for tray submenu display and update port label

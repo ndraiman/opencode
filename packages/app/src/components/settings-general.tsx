@@ -23,6 +23,7 @@ import {
 } from "@/context/settings"
 import { decode64 } from "@/utils/base64"
 import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
+import { QRCodeSVG } from "solid-qr-code"
 import { Link } from "./link"
 import { SettingsList } from "./settings-list"
 
@@ -575,12 +576,22 @@ export const SettingsGeneral: Component = () => {
         <Show when={platform.platform === "desktop" && platform.getServerPort}>
           {(_) => {
             const [portResource] = createResource(() => platform.getServerPort?.())
+            const [hostnameResource] = createResource(() => platform.getServerHostname?.())
+            const [externalHostnameResource] = createResource(() => platform.getServerExternalHostname?.())
             const [passResource] = createResource(() => platform.getServerPassword?.())
+            const [browserUrlResource] = createResource(() => platform.getServerBrowserUrl?.())
+            const browserUrl = () => (browserUrlResource.state === "pending" ? undefined : browserUrlResource.latest)
             const currentPort = () => (portResource.state === "pending" ? undefined : portResource.latest)
+            const currentHostname = () => (hostnameResource.state === "pending" ? undefined : hostnameResource.latest)
+            const currentExternalHostname = () => (externalHostnameResource.state === "pending" ? undefined : externalHostnameResource.latest)
             const currentPass = () => (passResource.state === "pending" ? undefined : passResource.latest)
             const [portInput, setPortInput] = createSignal("")
+            const [hostnameInput, setHostnameInput] = createSignal("")
+            const [externalHostnameInput, setExternalHostnameInput] = createSignal("")
             const [passInput, setPassInput] = createSignal("")
             const [portInit, setPortInit] = createSignal(false)
+            const [hostnameInit, setHostnameInit] = createSignal(false)
+            const [externalHostnameInit, setExternalHostnameInit] = createSignal(false)
             const [passInit, setPassInit] = createSignal(false)
 
             const effectivePort = () => {
@@ -589,6 +600,22 @@ export const SettingsGeneral: Component = () => {
                 setPortInit(true)
               }
               return portInput()
+            }
+
+            const effectiveHostname = () => {
+              if (!hostnameInit() && currentHostname() !== undefined) {
+                setHostnameInput(currentHostname() ?? "")
+                setHostnameInit(true)
+              }
+              return hostnameInput()
+            }
+
+            const effectiveExternalHostname = () => {
+              if (!externalHostnameInit() && currentExternalHostname() !== undefined) {
+                setExternalHostnameInput(currentExternalHostname() ?? "")
+                setExternalHostnameInit(true)
+              }
+              return externalHostnameInput()
             }
 
             const effectivePass = () => {
@@ -617,8 +644,12 @@ export const SettingsGeneral: Component = () => {
                 })
                 return
               }
+              const host = hostnameInput().trim() || null
+              const extHost = externalHostnameInput().trim() || null
               const pass = passInput().trim() || null
               await platform.setServerPort?.(port)
+              await platform.setServerHostname?.(host)
+              await platform.setServerExternalHostname?.(extHost)
               await platform.setServerPassword?.(pass)
               await platform.restart()
             }
@@ -638,6 +669,29 @@ export const SettingsGeneral: Component = () => {
                       value={effectivePort()}
                       onInput={(e) => setPortInput(e.currentTarget.value)}
                       class="w-24 rounded border border-border-weak-base bg-surface-stronger px-2 py-1 text-13-regular text-text-strong outline-none focus:border-border-strong"
+                    />
+                  </SettingsRow>
+
+                  <SettingsRow
+                    title="Network Access"
+                    description="Allow connections from other devices on the network (LAN/Wireguard)."
+                  >
+                    <Switch
+                      checked={effectiveHostname() === "0.0.0.0"}
+                      onChange={(checked) => setHostnameInput(checked ? "0.0.0.0" : "")}
+                    />
+                  </SettingsRow>
+
+                  <SettingsRow
+                    title="External Hostname"
+                    description="Hostname for QR code / browser URL. Auto-detected if blank."
+                  >
+                    <input
+                      type="text"
+                      placeholder="(auto-detect)"
+                      value={effectiveExternalHostname()}
+                      onInput={(e) => setExternalHostnameInput(e.currentTarget.value)}
+                      class="w-48 rounded border border-border-weak-base bg-surface-stronger px-2 py-1 text-13-regular text-text-strong font-mono outline-none focus:border-border-strong"
                     />
                   </SettingsRow>
 
@@ -667,6 +721,19 @@ export const SettingsGeneral: Component = () => {
                       </Button>
                     </div>
                   </SettingsRow>
+
+                  <Show when={browserUrl()}>
+                    {(url) => (
+                      <div class="flex flex-col items-center py-4 gap-2">
+                        <div class="bg-white p-3 rounded-lg">
+                          <QRCodeSVG value={url()} width={160} height={160} level="low" backgroundColor="#ffffff" backgroundAlpha={1} foregroundColor="#000000" foregroundAlpha={1} />
+                        </div>
+                        <span class="text-11-regular text-text-weak text-center break-all max-w-64">
+                          {url()}
+                        </span>
+                      </div>
+                    )}
+                  </Show>
 
                   <div class="flex justify-end py-3">
                     <Button size="small" variant="secondary" onClick={saveAndRestart}>
