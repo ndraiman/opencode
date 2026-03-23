@@ -22,7 +22,12 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-use tauri::{AppHandle, Listener, Manager, RunEvent, State, ipc::Channel};
+use tauri::{
+    AppHandle, Listener, Manager, RunEvent, State, WindowEvent,
+    ipc::Channel,
+    menu::{MenuBuilder, MenuItemBuilder},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+};
 #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_specta::Event;
@@ -67,6 +72,9 @@ struct ServerState {
 
 /// Resolves with sidecar credentials as soon as the sidecar is spawned (before health check).
 struct SidecarReady(futures::future::Shared<oneshot::Receiver<ServerReadyData>>);
+
+/// Pre-authenticated browser URL for the sidecar server.
+struct BrowserUrl(Arc<Mutex<Option<String>>>);
 
 #[tauri::command]
 #[specta::specta]
@@ -348,6 +356,12 @@ pub fn run() {
             // ensuring all buffered logs are flushed on shutdown.
             handle.manage(logging::init(&log_dir));
 
+            handle.manage(BrowserUrl(Arc::new(Mutex::new(None))));
+
+            if let Err(e) = setup_tray(&handle) {
+                tracing::error!("Failed to setup tray icon: {e}");
+            }
+
             builder.mount_events(&handle);
             tauri::async_runtime::spawn(initialize(handle));
 
@@ -361,12 +375,22 @@ pub fn run() {
     builder
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
-        .run(|app, event| {
-            if let RunEvent::Exit = event {
+        .run(|app, event| match &event {
+            RunEvent::WindowEvent {
+                label,
+                event: WindowEvent::CloseRequested { api, .. },
+                ..
+            } if label == MainWindow::LABEL => {
+                api.prevent_close();
+                if let Some(window) = app.get_webview_window(MainWindow::LABEL) {
+                    let _ = window.hide();
+                }
+            }
+            RunEvent::Exit => {
                 tracing::info!("Received Exit");
-
                 kill_sidecar(app.clone());
             }
+            _ => {}
         });
 }
 
@@ -415,6 +439,84 @@ fn test_export_types() {
 #[derive(tauri_specta::Event, serde::Deserialize, specta::Type)]
 struct LoadingWindowComplete;
 
+const TRAY_SHOW: &str = "show";
+const TRAY_BROWSER: &str = "browser";
+const TRAY_COPY_URL: &str = "copy_url";
+const TRAY_QUIT: &str = "quit";
+
+fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+    let show = MenuItemBuilder::with_id(TRAY_SHOW, "Show App").build(app)?;
+    let browser = MenuItemBuilder::with_id(TRAY_BROWSER, "Open in Browser").build(app)?;
+    let copy_url = MenuItemBuilder::with_id(TRAY_COPY_URL, "Copy Browser URL").build(app)?;
+    let quit = MenuItemBuilder::with_id(TRAY_QUIT, "Quit").build(app)?;
+
+    let menu = MenuBuilder::new(app)
+        .item(&show)
+        .item(&browser)
+        .item(&copy_url)
+        .separator()
+        .item(&quit)
+        .build()?;
+
+    let icon = app
+        .default_window_icon()
+        .cloned()
+        .ok_or("No default window icon configured")?;
+
+    TrayIconBuilder::new()
+        .icon(icon)
+        .menu(&menu)
+        .tooltip("OpenCode")
+        .on_menu_event(move |app, event| match event.id().as_ref() {
+            TRAY_SHOW => {
+                if let Some(window) = app.get_webview_window(MainWindow::LABEL) {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+            TRAY_BROWSER => {
+                if let Some(state) = app.try_state::<BrowserUrl>() {
+                    if let Some(url) = state.0.lock().unwrap().as_ref() {
+                        let _ = tauri_plugin_opener::open_url(url, None::<&str>);
+                    }
+                }
+            }
+            TRAY_COPY_URL => {
+                if let Some(state) = app.try_state::<BrowserUrl>() {
+                    if let Some(url) = state.0.lock().unwrap().as_ref() {
+                        use tauri_plugin_clipboard_manager::ClipboardExt;
+                        let _ = app.clipboard().write_text(url);
+                    }
+                }
+            }
+            TRAY_QUIT => {
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                let app = tray.app_handle();
+                if let Some(window) = app.get_webview_window(MainWindow::LABEL) {
+                    if window.is_visible().unwrap_or(false) {
+                        let _ = window.hide();
+                    } else {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                }
+            }
+        })
+        .build(app)?;
+
+    Ok(())
+}
+
 async fn initialize(app: AppHandle) {
     tracing::info!("Initializing app");
 
@@ -428,10 +530,16 @@ async fn initialize(app: AppHandle) {
     let hostname = "127.0.0.1";
     let url = format!("http://{hostname}:{port}");
     let password = uuid::Uuid::new_v4().to_string();
+    let launch_token = uuid::Uuid::new_v4().to_string();
 
     tracing::info!("Spawning sidecar on {url}");
     let (child, health_check) =
-        server::spawn_local_server(app.clone(), hostname.to_string(), port, password.clone());
+        server::spawn_local_server(app.clone(), hostname.to_string(), port, password.clone(), launch_token.clone());
+
+    // Set browser launch URL with one-time token for cookie-based auth
+    if let Some(state) = app.try_state::<BrowserUrl>() {
+        *state.0.lock().unwrap() = Some(format!("http://{hostname}:{port}/-/launch?token={launch_token}"));
+    }
 
     // Make sidecar credentials available immediately (before health check completes)
     let (ready_tx, ready_rx) = oneshot::channel();

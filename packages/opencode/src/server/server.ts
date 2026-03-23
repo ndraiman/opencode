@@ -41,18 +41,32 @@ export namespace Server {
     if (method === "POST" && /\/session\/[^/]+\/(message|prompt_async)$/.test(path)) return true
     return false
   }
+  const validSessions = new Set<string>()
 
   export const Default = lazy(() => create({}).app)
 
   export function ControlPlaneRoutes(upgrade: UpgradeWebSocket, app = new Hono(), opts?: { cors?: string[] }): Hono {
     return app
       .onError(errorHandler(log))
+      .get("/-/launch", (c) => {
+        const token = Flag.OPENCODE_LAUNCH_TOKEN
+        if (!token) return c.text("Forbidden", 403)
+        const provided = new URL(c.req.url).searchParams.get("token")
+        if (provided !== token) return c.text("Forbidden", 403)
+        const sessionId = crypto.randomUUID()
+        validSessions.add(sessionId)
+        c.header("Set-Cookie", `opencode_session=${sessionId}; HttpOnly; SameSite=Strict; Path=/`)
+        c.header("Cache-Control", "no-store")
+        return c.redirect("/", 302)
+      })
       .use((c, next) => {
-        // Allow CORS preflight requests to succeed without auth.
-        // Browser clients sending Authorization headers will preflight with OPTIONS.
         if (c.req.method === "OPTIONS") return next()
         const password = Flag.OPENCODE_SERVER_PASSWORD
         if (!password) return next()
+        // Allow browser sessions authenticated via launch token
+        const cookieHeader = c.req.header("Cookie") ?? ""
+        const sessionMatch = cookieHeader.match(/opencode_session=([^;]+)/)
+        if (sessionMatch && validSessions.has(sessionMatch[1])) return next()
         const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
         return basicAuth({ username, password })(c, next)
       })

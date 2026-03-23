@@ -554,6 +554,7 @@ pub fn serve(
     hostname: &str,
     port: u32,
     password: &str,
+    launch_token: &str,
 ) -> (CommandChild, oneshot::Receiver<TerminatedPayload>) {
     let (exit_tx, exit_rx) = oneshot::channel::<TerminatedPayload>();
 
@@ -562,6 +563,7 @@ pub fn serve(
     let envs = [
         ("OPENCODE_SERVER_USERNAME", "opencode".to_string()),
         ("OPENCODE_SERVER_PASSWORD", password.to_string()),
+        ("OPENCODE_LAUNCH_TOKEN", launch_token.to_string()),
     ];
 
     let (events, child) = spawn_command(
