@@ -78,8 +78,10 @@ struct BrowserUrl(Arc<Mutex<Option<String>>>);
 
 /// Server credentials for display in tray submenu.
 struct ServerCredentials {
+    port: Arc<Mutex<Option<u32>>>,
     password: Arc<Mutex<Option<String>>>,
     password_visible: Arc<Mutex<bool>>,
+    port_label: Arc<Mutex<Option<tauri::menu::MenuItem<tauri::Wry>>>>,
 }
 
 #[tauri::command]
@@ -364,8 +366,10 @@ pub fn run() {
 
             handle.manage(BrowserUrl(Arc::new(Mutex::new(None))));
             handle.manage(ServerCredentials {
+                port: Arc::new(Mutex::new(None)),
                 password: Arc::new(Mutex::new(None)),
                 password_visible: Arc::new(Mutex::new(false)),
+                port_label: Arc::new(Mutex::new(None)),
             });
 
             if let Err(e) = setup_tray(&handle) {
@@ -459,7 +463,6 @@ const TRAY_BROWSER: &str = "browser";
 const TRAY_COPY_URL: &str = "copy_url";
 const TRAY_TOGGLE_PASS: &str = "toggle_pass";
 const TRAY_COPY_CREDS: &str = "copy_creds";
-const TRAY_REGEN_PASS: &str = "regen_pass";
 const TRAY_QUIT: &str = "quit";
 
 fn generate_passphrase() -> String {
@@ -474,19 +477,19 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let browser = MenuItemBuilder::with_id(TRAY_BROWSER, "Open in Browser").build(app)?;
     let copy_url = MenuItemBuilder::with_id(TRAY_COPY_URL, "Copy Browser URL").build(app)?;
 
+    let port_label = MenuItemBuilder::with_id("port_label", "Port: ...").enabled(false).build(app)?;
     let username_label = MenuItemBuilder::new("Username: opencode").enabled(false).build(app)?;
     let password_label = MenuItemBuilder::with_id("password_label", "Password: ••••••••").enabled(false).build(app)?;
     let toggle_pass = MenuItemBuilder::with_id(TRAY_TOGGLE_PASS, "Show Password").build(app)?;
     let copy_creds = MenuItemBuilder::with_id(TRAY_COPY_CREDS, "Copy Credentials").build(app)?;
-    let regen_pass = MenuItemBuilder::with_id(TRAY_REGEN_PASS, "Regenerate Password").build(app)?;
 
     let server_info = SubmenuBuilder::with_id(app, "server_info", "Server Info")
+        .item(&port_label)
         .item(&username_label)
         .item(&password_label)
         .separator()
         .item(&toggle_pass)
         .item(&copy_creds)
-        .item(&regen_pass)
         .build()?;
 
     let quit = MenuItemBuilder::with_id(TRAY_QUIT, "Quit").build(app)?;
@@ -505,10 +508,13 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .cloned()
         .ok_or("No default window icon configured")?;
 
+    // Store port label for updating from initialize()
+    if let Some(creds) = app.try_state::<ServerCredentials>() {
+        *creds.port_label.lock().unwrap() = Some(port_label.clone());
+    }
+
     let password_label_item = password_label.clone();
     let toggle_pass_item = toggle_pass.clone();
-    let password_label_regen = password_label.clone();
-    let toggle_pass_regen = toggle_pass.clone();
 
     TrayIconBuilder::new()
         .icon(icon)
@@ -558,56 +564,6 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                         let _ = app.clipboard().write_text(format!("Username: opencode\nPassword: {pass}"));
                     }
                 }
-            }
-            TRAY_REGEN_PASS => {
-                let new_password = generate_passphrase();
-                let new_launch_token = uuid::Uuid::new_v4().to_string();
-
-                // Kill existing sidecar
-                kill_sidecar(app.clone());
-
-                // Read stored port
-                let stored_port = {
-                    use tauri_plugin_store::StoreExt;
-                    app.store(crate::constants::SETTINGS_STORE)
-                        .ok()
-                        .and_then(|store| store.get(crate::constants::SERVER_PORT_KEY))
-                        .and_then(|v| v.as_u64())
-                        .map(|n| n as u32)
-                };
-                let port = get_sidecar_port(stored_port);
-                let hostname = "127.0.0.1";
-
-                // Spawn new sidecar with new credentials
-                let (child, _health_check) = server::spawn_local_server(
-                    app.clone(),
-                    hostname.to_string(),
-                    port,
-                    new_password.clone(),
-                    new_launch_token.clone(),
-                );
-
-                // Update server state
-                if let Some(state) = app.try_state::<ServerState>() {
-                    *state.child.lock().unwrap() = Some(child);
-                }
-
-                // Update browser URL
-                if let Some(state) = app.try_state::<BrowserUrl>() {
-                    *state.0.lock().unwrap() = Some(format!("http://{hostname}:{port}/-/launch?token={new_launch_token}"));
-                }
-
-                // Update credentials and reset visibility
-                if let Some(creds) = app.try_state::<ServerCredentials>() {
-                    *creds.password.lock().unwrap() = Some(new_password);
-                    *creds.password_visible.lock().unwrap() = false;
-                }
-
-                // Reset tray labels
-                let _ = password_label_regen.set_text("Password: ••••••••");
-                let _ = toggle_pass_regen.set_text("Show Password");
-
-                tracing::info!("Regenerated server password and restarted sidecar");
             }
             TRAY_QUIT => {
                 app.exit(0);
@@ -659,11 +615,21 @@ async fn initialize(app: AppHandle) {
     let url = format!("http://{hostname}:{port}");
     let password = {
         use tauri_plugin_store::StoreExt;
-        app.store(crate::constants::SETTINGS_STORE)
-            .ok()
-            .and_then(|store| store.get(crate::constants::SERVER_PASSWORD_KEY))
-            .and_then(|v| v.as_str().map(String::from))
-            .unwrap_or_else(generate_passphrase)
+        let store = app.store(crate::constants::SETTINGS_STORE).ok();
+        let stored = store.as_ref()
+            .and_then(|s| s.get(crate::constants::SERVER_PASSWORD_KEY))
+            .and_then(|v| v.as_str().map(String::from));
+        match stored {
+            Some(p) => p,
+            None => {
+                let generated = generate_passphrase();
+                if let Some(s) = &store {
+                    s.set(crate::constants::SERVER_PASSWORD_KEY, serde_json::Value::String(generated.clone()));
+                    let _ = s.save();
+                }
+                generated
+            }
+        }
     };
     let launch_token = uuid::Uuid::new_v4().to_string();
 
@@ -676,9 +642,13 @@ async fn initialize(app: AppHandle) {
         *state.0.lock().unwrap() = Some(format!("http://{hostname}:{port}/-/launch?token={launch_token}"));
     }
 
-    // Store password for tray submenu display
+    // Store credentials for tray submenu display and update port label
     if let Some(creds) = app.try_state::<ServerCredentials>() {
+        *creds.port.lock().unwrap() = Some(port);
         *creds.password.lock().unwrap() = Some(password.clone());
+        if let Some(label) = creds.port_label.lock().unwrap().as_ref() {
+            let _ = label.set_text(&format!("Port: {port}"));
+        }
     }
 
     // Make sidecar credentials available immediately (before health check completes)

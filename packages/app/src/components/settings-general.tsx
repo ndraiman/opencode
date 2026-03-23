@@ -643,21 +643,21 @@ export const SettingsGeneral: Component = () => {
 
                   <SettingsRow
                     title="Server Password"
-                    description="Password for HTTP basic auth. Leave empty for a random passphrase on each launch."
+                    description="Password for HTTP basic auth. Use Randomize for a memorable passphrase."
                   >
                     <div class="flex items-center gap-2">
-                      <div class="relative">
+                      <div class="relative flex items-center">
                         <input
                           type={showPass() ? "text" : "password"}
-                          placeholder="(random on launch)"
+                          placeholder="Click Randomize"
                           value={effectivePass()}
                           onInput={(e) => setPassInput(e.currentTarget.value)}
-                          class="w-48 rounded border border-border-weak-base bg-surface-stronger px-2 py-1 pr-8 text-13-regular text-text-strong font-mono outline-none focus:border-border-strong"
+                          class="w-64 rounded border border-border-weak-base bg-surface-stronger px-2 py-1 pr-8 text-13-regular text-text-strong font-mono outline-none focus:border-border-strong"
                         />
                         <button
                           type="button"
                           onClick={() => setShowPass(!showPass())}
-                          class="absolute right-1.5 top-1/2 -translate-y-1/2 text-text-weak hover:text-text-strong"
+                          class="absolute right-1.5 flex items-center text-text-weak hover:text-text-strong"
                         >
                           <Icon name="eye" size="small" />
                         </button>
