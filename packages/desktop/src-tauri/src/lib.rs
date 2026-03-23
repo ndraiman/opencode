@@ -413,6 +413,8 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             await_initialization,
             server::get_default_server_url,
             server::set_default_server_url,
+            server::get_server_port,
+            server::set_server_port,
             server::get_wsl_config,
             server::set_wsl_config,
             get_display_backend,
@@ -579,7 +581,15 @@ async fn initialize(app: AppHandle) {
     spawn_cli_sync_task(app.clone());
 
     // Spawn sidecar immediately - credentials are known before health check
-    let port = get_sidecar_port();
+    let stored_port = {
+        use tauri_plugin_store::StoreExt;
+        app.store(crate::constants::SETTINGS_STORE)
+            .ok()
+            .and_then(|store| store.get(crate::constants::SERVER_PORT_KEY))
+            .and_then(|v| v.as_u64())
+            .map(|n| n as u32)
+    };
+    let port = get_sidecar_port(stored_port);
     let hostname = "127.0.0.1";
     let url = format!("http://{hostname}:{port}");
     let password = uuid::Uuid::new_v4().to_string();
@@ -714,18 +724,21 @@ fn spawn_cli_sync_task(app: AppHandle) {
 }
 
 
-fn get_sidecar_port() -> u32 {
-    option_env!("OPENCODE_PORT")
-        .map(|s| s.to_string())
-        .or_else(|| std::env::var("OPENCODE_PORT").ok())
-        .and_then(|port_str| port_str.parse().ok())
+fn get_sidecar_port(stored_port: Option<u32>) -> u32 {
+    stored_port
+        .or_else(|| {
+            option_env!("OPENCODE_PORT")
+                .map(|s| s.to_string())
+                .or_else(|| std::env::var("OPENCODE_PORT").ok())
+                .and_then(|port_str| port_str.parse().ok())
+        })
         .unwrap_or_else(|| {
             TcpListener::bind("127.0.0.1:0")
                 .expect("Failed to bind to find free port")
                 .local_addr()
                 .expect("Failed to get local address")
-                .port()
-        }) as u32
+                .port() as u32
+        })
 }
 
 fn sqlite_file_exists() -> bool {

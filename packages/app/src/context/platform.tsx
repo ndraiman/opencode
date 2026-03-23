@@ -76,6 +76,12 @@ export type Platform = {
   /** Set the preferred display backend (desktop only) */
   setDisplayBackend?(backend: DisplayBackend): Promise<void>
 
+  /** Get the configured server port (desktop only) */
+  getServerPort?(): Promise<number | null>
+
+  /** Set the server port (desktop only, requires restart) */
+  setServerPort?(port: number | null): Promise<void>
+
   /** Parse markdown to HTML using native parser (desktop only, returns unprocessed code blocks) */
   parseMarkdown?(markdown: string): Promise<string>
 

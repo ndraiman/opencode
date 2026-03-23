@@ -372,6 +372,14 @@ const createPlatform = (): Platform => {
       await commands.setDisplayBackend(backend)
     },
 
+    getServerPort: async () => {
+      return commands.getServerPort().catch(() => null)
+    },
+
+    setServerPort: async (port) => {
+      await commands.setServerPort(port)
+    },
+
     parseMarkdown: (markdown: string) => commands.parseMarkdownCommand(markdown),
 
     webviewZoom,

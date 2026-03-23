@@ -1,4 +1,4 @@
-import { Component, Show, createMemo, createResource, onMount, type JSX } from "solid-js"
+import { Component, Show, createMemo, createResource, createSignal, onMount, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -571,6 +571,66 @@ export const SettingsGeneral: Component = () => {
             )
           }}
         </Show>*/}
+
+        <Show when={platform.platform === "desktop" && platform.getServerPort}>
+          {(_) => {
+            const [portResource] = createResource(() => platform.getServerPort?.())
+            const currentPort = () => (portResource.state === "pending" ? undefined : portResource.latest)
+            const [portInput, setPortInput] = createSignal("")
+            const [initialized, setInitialized] = createSignal(false)
+
+            const effectiveInput = () => {
+              if (!initialized() && currentPort() !== undefined) {
+                setPortInput(currentPort() != null ? String(currentPort()) : "")
+                setInitialized(true)
+              }
+              return portInput()
+            }
+
+            return (
+              <div class="flex flex-col gap-1">
+                <h3 class="text-14-medium text-text-strong pb-2">Server</h3>
+
+                <SettingsList>
+                  <SettingsRow
+                    title="Server Port"
+                    description="Fixed port for the local server. Leave empty for a random port."
+                  >
+                    <div class="flex items-center gap-2">
+                      <input
+                        type="number"
+                        placeholder="(random)"
+                        value={effectiveInput()}
+                        onInput={(e) => setPortInput(e.currentTarget.value)}
+                        class="w-24 rounded border border-border-weak-base bg-surface-stronger px-2 py-1 text-13-regular text-text-strong outline-none focus:border-border-strong"
+                      />
+                      <Button
+                        size="small"
+                        variant="secondary"
+                        onClick={async () => {
+                          const val = portInput().trim()
+                          const port = val === "" ? null : parseInt(val, 10)
+                          if (port !== null && (isNaN(port) || port < 1 || port > 65535)) {
+                            showToast({
+                              variant: "error",
+                              title: "Invalid port",
+                              description: "Port must be between 1 and 65535",
+                            })
+                            return
+                          }
+                          await platform.setServerPort?.(port)
+                          await platform.restart()
+                        }}
+                      >
+                        Save & Restart
+                      </Button>
+                    </div>
+                  </SettingsRow>
+                </SettingsList>
+              </div>
+            )
+          }}
+        </Show>
 
         <UpdatesSection />
 
