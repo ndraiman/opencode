@@ -36,7 +36,7 @@ use tokio::{
     time::{sleep, timeout},
 };
 
-use crate::cli::{sqlite_migration::SqliteMigrationProgress, sync_cli};
+use crate::cli::{sqlite_migration::SqliteMigrationProgress, sync_cli, shell_escape};
 use crate::constants::*;
 use crate::windows::{LoadingWindow, MainWindow};
 
@@ -75,6 +75,9 @@ struct SidecarReady(futures::future::Shared<oneshot::Receiver<ServerReadyData>>)
 
 /// Pre-authenticated browser URL for the sidecar server.
 pub(crate) struct BrowserUrl(pub(crate) Arc<Mutex<Option<String>>>);
+
+/// Attach command text for copying to clipboard.
+pub(crate) struct AttachCommand(pub(crate) Arc<Mutex<Option<String>>>);
 
 /// Server credentials for display in tray submenu.
 struct ServerCredentials {
@@ -365,6 +368,7 @@ pub fn run() {
             handle.manage(logging::init(&log_dir));
 
             handle.manage(BrowserUrl(Arc::new(Mutex::new(None))));
+            handle.manage(AttachCommand(Arc::new(Mutex::new(None))));
             handle.manage(ServerCredentials {
                 port: Arc::new(Mutex::new(None)),
                 password: Arc::new(Mutex::new(None)),
@@ -423,6 +427,7 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             server::set_server_password,
             server::generate_passphrase,
             server::get_browser_url,
+            server::get_attach_command,
             server::get_server_hostname,
             server::set_server_hostname,
             server::get_server_external_hostname,
@@ -466,6 +471,7 @@ struct LoadingWindowComplete;
 const TRAY_SHOW: &str = "show";
 const TRAY_BROWSER: &str = "browser";
 const TRAY_COPY_URL: &str = "copy_url";
+const TRAY_COPY_ATTACH: &str = "copy_attach";
 const TRAY_TOGGLE_PASS: &str = "toggle_pass";
 const TRAY_COPY_CREDS: &str = "copy_creds";
 const TRAY_QR: &str = "qr";
@@ -482,6 +488,7 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let show = MenuItemBuilder::with_id(TRAY_SHOW, "Show App").build(app)?;
     let browser = MenuItemBuilder::with_id(TRAY_BROWSER, "Open in Browser").build(app)?;
     let copy_url = MenuItemBuilder::with_id(TRAY_COPY_URL, "Copy Browser URL").build(app)?;
+    let copy_attach = MenuItemBuilder::with_id(TRAY_COPY_ATTACH, "Copy Attach Command").build(app)?;
     let qr = MenuItemBuilder::with_id(TRAY_QR, "Show QR Code").build(app)?;
 
     let port_label = MenuItemBuilder::with_id("port_label", "Port: ...").enabled(false).build(app)?;
@@ -505,6 +512,7 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .item(&show)
         .item(&browser)
         .item(&copy_url)
+        .item(&copy_attach)
         .item(&qr)
         .item(&server_info)
         .separator()
@@ -547,6 +555,14 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                     if let Some(url) = state.0.lock().unwrap().as_ref() {
                         use tauri_plugin_clipboard_manager::ClipboardExt;
                         let _ = app.clipboard().write_text(url);
+                    }
+                }
+            }
+            TRAY_COPY_ATTACH => {
+                if let Some(state) = app.try_state::<AttachCommand>() {
+                    if let Some(cmd) = state.0.lock().unwrap().as_ref() {
+                        use tauri_plugin_clipboard_manager::ClipboardExt;
+                        let _ = app.clipboard().write_text(cmd);
                     }
                 }
             }
@@ -691,6 +707,15 @@ async fn initialize(app: AppHandle) {
     // Set browser launch URL with one-time token for cookie-based auth
     if let Some(state) = app.try_state::<BrowserUrl>() {
         *state.0.lock().unwrap() = Some(format!("http://{display_hostname}:{port}/-/launch?token={launch_token}"));
+    }
+
+    // Build attach command with explicit --dir for caller cwd
+    let attach_cmd = format!(
+        "opencode attach http://{display_hostname}:{port} --dir $(pwd) --password {}",
+        shell_escape(&password)
+    );
+    if let Some(state) = app.try_state::<AttachCommand>() {
+        *state.0.lock().unwrap() = Some(attach_cmd);
     }
 
     // Store credentials for tray submenu display and update port label

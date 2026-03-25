@@ -106,6 +106,9 @@ export type Platform = {
   /** Get the browser URL for the local server (desktop only) */
   getServerBrowserUrl?(): Promise<string | null>
 
+  /** Get the attach command for the local server (desktop only) */
+  getServerAttachCommand?(): Promise<string | null>
+
   /** Parse markdown to HTML using native parser (desktop only, returns unprocessed code blocks) */
   parseMarkdown?(markdown: string): Promise<string>
 

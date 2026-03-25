@@ -413,6 +413,10 @@ const createPlatform = (): Platform => {
       return commands.getBrowserUrl().catch(() => null)
     },
 
+    getServerAttachCommand: async () => {
+      return commands.getAttachCommand().catch(() => null)
+    },
+
     parseMarkdown: (markdown: string) => commands.parseMarkdownCommand(markdown),
 
     webviewZoom,
@@ -521,9 +525,7 @@ render(() => {
 
   // Standalone QR code page for tray popup
   if (window.location.pathname === "/qr") {
-    return (
-      <QrPage getUrl={() => commands.getBrowserUrl().catch(() => null)} />
-    )
+    return <QrPage getUrl={() => commands.getBrowserUrl().catch(() => null)} />
   }
 
   return (

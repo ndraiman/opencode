@@ -65,6 +65,30 @@ const playDemoSound = (id: string | undefined) => {
   }, 100)
 }
 
+const writeToClipboard = (value: string) => {
+  const body = typeof document === "undefined" ? undefined : document.body
+  if (body) {
+    const textarea = document.createElement("textarea")
+    textarea.value = value
+    textarea.setAttribute("readonly", "")
+    textarea.style.position = "fixed"
+    textarea.style.opacity = "0"
+    textarea.style.pointerEvents = "none"
+    body.appendChild(textarea)
+    textarea.select()
+    const copied = document.execCommand("copy")
+    body.removeChild(textarea)
+    if (copied) return Promise.resolve(true)
+  }
+
+  const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard
+  if (!clipboard?.writeText) return Promise.resolve(false)
+  return clipboard.writeText(value).then(
+    () => true,
+    () => false,
+  )
+}
+
 export const SettingsGeneral: Component = () => {
   const theme = useTheme()
   const language = useLanguage()
@@ -580,10 +604,14 @@ export const SettingsGeneral: Component = () => {
             const [externalHostnameResource] = createResource(() => platform.getServerExternalHostname?.())
             const [passResource] = createResource(() => platform.getServerPassword?.())
             const [browserUrlResource] = createResource(() => platform.getServerBrowserUrl?.())
+            const [attachCommandResource] = createResource(() => platform.getServerAttachCommand?.())
             const browserUrl = () => (browserUrlResource.state === "pending" ? undefined : browserUrlResource.latest)
+            const attachCommand = () =>
+              attachCommandResource.state === "pending" ? undefined : attachCommandResource.latest
             const currentPort = () => (portResource.state === "pending" ? undefined : portResource.latest)
             const currentHostname = () => (hostnameResource.state === "pending" ? undefined : hostnameResource.latest)
-            const currentExternalHostname = () => (externalHostnameResource.state === "pending" ? undefined : externalHostnameResource.latest)
+            const currentExternalHostname = () =>
+              externalHostnameResource.state === "pending" ? undefined : externalHostnameResource.latest
             const currentPass = () => (passResource.state === "pending" ? undefined : passResource.latest)
             const [portInput, setPortInput] = createSignal("")
             const [hostnameInput, setHostnameInput] = createSignal("")
@@ -631,6 +659,26 @@ export const SettingsGeneral: Component = () => {
             const randomize = async () => {
               const phrase = await platform.generatePassphrase?.()
               if (phrase) setPassInput(phrase)
+            }
+
+            const copyAttachCommand = async () => {
+              const cmd = attachCommand()
+              if (!cmd) return
+              const ok = await writeToClipboard(cmd)
+              if (!ok) {
+                showToast({
+                  variant: "error",
+                  title: "Copy failed",
+                  description: "Could not copy to clipboard",
+                })
+                return
+              }
+              showToast({
+                variant: "success",
+                icon: "circle-check",
+                title: "Copied",
+                description: "Attach command copied to clipboard",
+              })
             }
 
             const saveAndRestart = async () => {
@@ -726,11 +774,23 @@ export const SettingsGeneral: Component = () => {
                     {(url) => (
                       <div class="flex flex-col items-center py-4 gap-2">
                         <div class="bg-white p-3 rounded-lg">
-                          <QRCodeSVG value={url()} width={160} height={160} level="low" backgroundColor="#ffffff" backgroundAlpha={1} foregroundColor="#000000" foregroundAlpha={1} />
+                          <QRCodeSVG
+                            value={url()}
+                            width={160}
+                            height={160}
+                            level="low"
+                            backgroundColor="#ffffff"
+                            backgroundAlpha={1}
+                            foregroundColor="#000000"
+                            foregroundAlpha={1}
+                          />
                         </div>
-                        <span class="text-11-regular text-text-weak text-center break-all max-w-64">
-                          {url()}
-                        </span>
+                        <span class="text-11-regular text-text-weak text-center break-all max-w-64">{url()}</span>
+                        <Show when={attachCommand()}>
+                          <Button size="small" variant="secondary" onClick={copyAttachCommand}>
+                            Copy Attach Command
+                          </Button>
+                        </Show>
                       </div>
                     )}
                   </Show>

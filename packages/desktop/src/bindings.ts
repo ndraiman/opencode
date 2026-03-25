@@ -16,6 +16,7 @@ export const commands = {
 	setServerPassword: (password: string | null) => __TAURI_INVOKE<null>("set_server_password", { password }),
 	generatePassphrase: () => __TAURI_INVOKE<string>("generate_passphrase"),
 	getBrowserUrl: () => __TAURI_INVOKE<string | null>("get_browser_url"),
+	getAttachCommand: () => __TAURI_INVOKE<string | null>("get_attach_command"),
 	getServerHostname: () => __TAURI_INVOKE<string | null>("get_server_hostname"),
 	setServerHostname: (hostname: string | null) => __TAURI_INVOKE<null>("set_server_hostname", { hostname }),
 	getServerExternalHostname: () => __TAURI_INVOKE<string | null>("get_server_external_hostname"),

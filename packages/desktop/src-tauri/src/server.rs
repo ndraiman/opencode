@@ -141,6 +141,13 @@ pub fn get_browser_url(app: AppHandle) -> Option<String> {
 
 #[tauri::command]
 #[specta::specta]
+pub fn get_attach_command(app: AppHandle) -> Option<String> {
+    app.try_state::<crate::AttachCommand>()
+        .and_then(|state| state.0.lock().unwrap().clone())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub fn get_server_hostname(app: AppHandle) -> Result<Option<String>, String> {
     let store = app
         .store(SETTINGS_STORE)

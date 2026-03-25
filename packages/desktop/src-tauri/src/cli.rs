@@ -225,7 +225,7 @@ fn is_wsl_enabled(_app: &tauri::AppHandle) -> bool {
     get_wsl_config(_app.clone()).is_ok_and(|v| v.enabled)
 }
 
-fn shell_escape(input: &str) -> String {
+pub fn shell_escape(input: &str) -> String {
     if input.is_empty() {
         return "''".to_string();
     }
